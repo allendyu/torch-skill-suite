@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "data_contract",
+  "type": "object",
+  "description": "Data contract schema for PyTorch data engineering. Supports multiple data types (image, text, time_series, tabular, audio, video) and task types (classification, detection, segmentation, regression, generation, translation, etc.).",
+  "properties": {
+    "data_type": {
+      "type": "string",
+      "enum": ["image", "text", "time_series", "tabular", "audio", "video", "multimodal"],
+      "description": "Primary modality of the input data."
+    },
+    "task_type": {
+      "type": "string",
+      "enum": ["classification", "detection", "segmentation", "regression", "generation", "translation", "clustering", "reinforcement_learning"],
+      "description": "Machine learning task type."
+    },
+    "input_spec": {
+      "type": "object",
+      "description": "Specification of input data shape, format, and constraints. Structure varies by data_type and task_type.",
+      "properties": {
+        "shape": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Shape of a single input sample (e.g., [channels, height, width] for images, [sequence_length] for text, [time_steps, features] for time series)."
+        },
+        "dtype": {
+          "type": "string",
+          "description": "Data type (e.g., 'float32', 'int64', 'uint8')."
+        },
+        "channels_first": {
+          "type": "boolean",
+          "description": "For image data, whether channels come first (C, H, W) or last (H, W, C). Default true for PyTorch."
+        },
+        "sequence_length": {
+          "type": "integer",
+          "description": "For text or time series, fixed sequence length (or -1 for variable)."
+        },
+        "vocab_size": {
+          "type": "integer",
+          "description": "For text, vocabulary size."
+        },
+        "num_features": {
+          "type": "integer",
+          "description": "For tabular data, number of features."
+        },
+        "sample_rate": {
+          "type": "integer",
+          "description": "For audio, sample rate in Hz."
+        },
+        "duration": {
+          "type": "number",
+          "description": "For audio/video, duration in seconds."
+        },
+        "fps": {
+          "type": "integer",
+          "description": "For video, frames per second."
+        }
+      },
+      "additionalProperties": true
+    },
+    "output_spec": {
+      "type": "object",
+      "description": "Specification of output/target/label format.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["categorical", "continuous", "bounding_box", "mask", "sequence", "multiple"],
+          "description": "Type of output."
+        },
+        "num_classes": {
+          "type": "integer",
+          "description": "For classification, number of classes."
+        },
+        "label_map": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Mapping from integer label to class name."
+        },
+        "bbox_format": {
+          "type": "string",
+          "enum": ["xyxy", "xywh", "cxcywh"],
+          "description": "For detection, bounding box format."
+        },
+        "mask_shape": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "For segmentation, shape of mask (height, width)."
+        },
+        "output_dim": {
+          "type": "integer",
+          "description": "For regression, dimension of continuous output."
+        }
+      },
+      "additionalProperties": true
+    },
+    "splits": {
+      "type": "object",
+      "description": "Dataset splits and their paths or proportions.",
+      "properties": {
+        "train": {
+          "type": ["string", "object"],
+          "description": "Training split path or proportion (0-1)."
+        },
+        "val": {
+          "type": ["string", "object"],
+          "description": "Validation split path or proportion."
+        },
+        "test": {
+          "type": ["string", "object"],
+          "description": "Test split path or proportion."
+        }
+      },
+      "additionalProperties": true,
+      "required": ["train"]
+    },
+    "preprocessing": {
+      "type": "array",
+      "description": "List of preprocessing steps to apply.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "params": { "type": "object" }
+        }
+      }
+    },
+    "data_format_option": {
+      "type": "string",
+      "enum": ["user_provided", "auto_inferred"],
+      "description": "Whether the data format is provided by the user or inferred automatically."
+    },
+    "user_format_spec": {
+      "type": "object",
+      "description": "Required if data_format_option is 'user_provided'. User-provided format specification.",
+      "properties": {
+        "format_type": { "type": "string" },
+        "details": { "type": "object" }
+      }
+    },
+    "inferred_format_spec": {
+      "type": "object",
+      "description": "Required if data_format_option is 'auto_inferred'. Automatically inferred format specification.",
+      "properties": {
+        "format_type": { "type": "string" },
+        "details": { "type": "object" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata about the dataset.",
+      "additionalProperties": true
+    }
+  },
+  "required": ["data_type", "task_type", "splits"],
+  "dependentRequired": {
+    "user_format_spec": ["data_format_option"],
+    "inferred_format_spec": ["data_format_option"]
+  },
+  "dependentSchemas": {
+    "user_format_spec": {
+      "properties": {
+        "data_format_option": { "const": "user_provided" }
+      }
+    },
+    "inferred_format_spec": {
+      "properties": {
+        "data_format_option": { "const": "auto_inferred" }
+      }
+    }
+  }
+}

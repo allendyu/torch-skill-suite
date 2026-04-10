@@ -1,0 +1,5 @@
+format: onnx
+service: fastapi
+preprocess: imagenet_norm
+postprocess: softmax_topk
+batch_infer: true

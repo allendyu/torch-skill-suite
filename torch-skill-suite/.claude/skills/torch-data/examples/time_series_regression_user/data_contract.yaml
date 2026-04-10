@@ -1,0 +1,36 @@
+# Example: Time series regression with user-provided format
+# Dataset structure: NPZ file containing 'X' (features) and 'y' (target)
+
+data_type: time_series
+task_type: regression
+input_spec:
+  shape: [100, 5]               # time_steps, features
+  dtype: float32
+output_spec:
+  type: continuous
+  output_dim: 1                 # predicting a scalar value
+splits:
+  train: 0.7                    # proportions: will split the single NPZ file
+  val: 0.15
+  test: 0.15
+preprocessing:
+  - name: standardize
+    params:
+      per_feature: true         # normalize each feature independently
+      with_mean: true
+      with_std: true
+  - name: sliding_window
+    params:
+      window_size: 100
+      stride: 1                 # for sequential splitting
+data_format_option: user_provided
+user_format_spec:
+  format_type: NPZ
+  details:
+    keys: ["X", "y"]
+    # X shape: (n_samples, time_steps, features)
+    # y shape: (n_samples,)
+    description: "Single NPZ file containing all samples; splits will be created by indexing."
+metadata:
+  source: "Synthetic time series regression dataset"
+  note: "The dataset is stored as a single .npz file. The skill will split it according to proportions."

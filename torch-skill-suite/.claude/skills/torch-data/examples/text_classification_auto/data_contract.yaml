@@ -1,0 +1,43 @@
+# Example: Text classification with auto-inferred format
+# Dataset structure: CSV file with 'text' and 'label' columns
+
+data_type: text
+task_type: classification
+input_spec:
+  sequence_length: 512          # after tokenization & padding
+  vocab_size: 30522             # BERT-base uncased vocabulary size
+  dtype: int64
+output_spec:
+  type: categorical
+  num_classes: 3
+  label_map:
+    0: negative
+    1: neutral
+    2: positive
+splits:
+  train: data/train.csv
+  val: data/val.csv
+  test: data/test.csv
+preprocessing:
+  - name: tokenize
+    params:
+      tokenizer: "bert-base-uncased"
+      max_length: 512
+      truncation: true
+      padding: "max_length"
+  - name: add_special_tokens
+    params: {}
+data_format_option: auto_inferred
+# inferred_format_spec will be filled after inspecting the CSV files
+# Expected inference:
+# inferred_format_spec:
+#   format_type: CSV
+#   details:
+#     columns: ["text", "label"]
+#     delimiter: ","
+#     quotechar: '"'
+#     encoding: "utf-8"
+metadata:
+  source: "Sentiment analysis example dataset"
+  description: "CSV files with one text sample per row, label is integer 0-2."
+  note: "The skill will automatically detect column names and delimiter."

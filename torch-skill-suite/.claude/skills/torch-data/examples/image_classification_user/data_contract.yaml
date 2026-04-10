@@ -1,0 +1,45 @@
+# Example: Image classification with user-provided format
+# Dataset structure: ImageFolder-style, with class folders inside split folders
+
+data_type: image
+task_type: classification
+input_spec:
+  shape: [3, 224, 224]          # channels, height, width
+  dtype: float32
+  channels_first: true
+output_spec:
+  type: categorical
+  num_classes: 5
+  label_map:
+    0: apple
+    1: banana
+    2: orange
+    3: strawberry
+    4: grape
+splits:
+  train: data/train
+  val: data/val
+  test: data/test
+preprocessing:
+  - name: resize
+    params: { size: [256, 256] }
+  - name: random_crop
+    params: { size: [224, 224] }
+  - name: random_horizontal_flip
+    params: { p: 0.5 }
+  - name: normalize
+    params: { mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225] }
+data_format_option: user_provided
+user_format_spec:
+  format_type: ImageFolder
+  details:
+    structure: "Each split folder contains subdirectories named by class, with images inside."
+    extensions: [".jpg", ".jpeg", ".png"]
+    # Example layout:
+    # data/train/apple/xxx.jpg
+    # data/train/banana/xxx.jpg
+    # data/val/apple/yyy.jpg
+metadata:
+  source: "Fruit-5 dataset (synthetic example)"
+  license: "CC0"
+  description: "Small dataset of fruit images for classification practice."

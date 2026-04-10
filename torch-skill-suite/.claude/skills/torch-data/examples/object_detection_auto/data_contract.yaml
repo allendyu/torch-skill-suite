@@ -1,0 +1,39 @@
+# Example: Object detection with auto-inferred format
+# Dataset structure: YOLO-style - images in one folder, labels in another with .txt files
+
+data_type: image
+task_type: detection
+input_spec:
+  shape: [3, 640, 640]          # channels, height, width
+  dtype: uint8                  # raw images 0-255
+  channels_first: true
+output_spec:
+  type: bounding_box
+  bbox_format: cxcywh           # YOLO uses normalized center-x, center-y, width, height
+  num_classes: 80               # COCO classes
+splits:
+  train: data/images/train
+  val: data/images/val
+  # test omitted in this example
+preprocessing:
+  - name: resize
+    params:
+      size: [640, 640]
+      keep_aspect_ratio: true   # pad to maintain aspect ratio
+  - name: normalize
+    params:
+      scale: 1.0/255.0          # convert uint8 to float32 in [0,1]
+data_format_option: auto_inferred
+# inferred_format_spec will be filled after inspecting the directory structure
+# Expected inference:
+# inferred_format_spec:
+#   format_type: YOLO
+#   details:
+#     image_dir: "data/images/train"
+#     label_dir: "data/labels/train"
+#     label_suffix: ".txt"
+#     class_file: "data/classes.txt"
+metadata:
+  source: "COCO-style detection dataset"
+  annotation_format: "YOLO"
+  note: "Each image has a corresponding .txt file with same name, each line: class_id cx cy w h (normalized)."

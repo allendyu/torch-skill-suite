@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "project_spec",
+  "type": "object",
+  "description": "Placeholder schema for global project specification."
+}

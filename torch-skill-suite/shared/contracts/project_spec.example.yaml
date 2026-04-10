@@ -1,0 +1,8 @@
+task_type: image_classification
+objective: placeholder
+framework: pytorch
+input_modality: image
+deployment_target: fastapi
+constraints:
+  latency_ms: 50
+  model_size_mb: 200
