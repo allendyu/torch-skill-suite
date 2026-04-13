@@ -1,0 +1,47 @@
+# Example: Multimodal paired classification with user-provided format
+# Dataset structure: manifest rows align an image path, a text field, and one class label per sample
+
+data_type: multimodal
+task_type: classification
+input_spec:
+  image:
+    shape: [3, 224, 224]
+    dtype: float32
+    channels_first: true
+  text:
+    sequence_length: 128
+    vocab_size: 30522
+    dtype: int64
+output_spec:
+  type: categorical
+  num_classes: 4
+  label_map:
+    0: product_match
+    1: product_mismatch
+    2: damaged_item
+    3: unreadable_listing
+splits:
+  train: data/train_manifest.jsonl
+  val: data/val_manifest.jsonl
+  test: data/test_manifest.jsonl
+preprocessing:
+  - name: resize_image
+    params: { size: [224, 224] }
+  - name: normalize_image
+    params: { mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225] }
+  - name: tokenize_text
+    params: { tokenizer: "bert-base-uncased", max_length: 128, truncation: true, padding: "max_length" }
+data_format_option: user_provided
+user_format_spec:
+  format_type: JSONLManifest
+  details:
+    fields:
+      image_path: path to image file
+      text: free-form product description
+      label: integer class label
+    pairing_rule: "Each JSONL row defines one aligned image-text-label sample."
+    image_root: data/images
+metadata:
+  source: "Multimodal product moderation example"
+  description: "Paired image and text inputs used together for one classification target."
+  note: "Alignment between modalities is explicit in the manifest rather than inferred from filenames."

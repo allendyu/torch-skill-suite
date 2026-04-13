@@ -71,10 +71,39 @@ Typical outputs include:
 - Split logic or dataset indexing structure
 - Sanity-check guidance for samples, labels, shapes, and imbalance
 - `data_contract.yaml`
+- `inferred_format_spec` plus inspection metadata such as `confidence`, `warnings`, `observed_fields`, and `missing_information`
 - Clear assumptions about data layout and mapping
 
 Prefer outputs that can be used directly by `torch-model` and `torch-train`.
 产出应尽量能直接被 `torch-model` 与 `torch-train` 消费。
+
+## Current inspection coverage / 当前检查覆盖范围
+
+Current implemented inspection coverage includes:
+当前已实现的数据检查覆盖包括：
+
+- image: classification / detection / segmentation
+- text: classification
+- time_series: classification / regression
+- tabular: classification / regression
+- audio: classification
+- video: classification
+- multimodal: manifest-driven classification
+
+Current recognizable patterns include:
+当前可识别的常见模式包括：
+
+- `ImageFolder`, flat image directories
+- YOLO-style image/label directories, COCO-style JSON hints
+- image/mask directory pairs for segmentation
+- CSV / TSV / JSONL / JSON tabular or manifest files
+- NPZ-by-suffix time-series inputs
+- audio/video metadata manifests
+- frame directories for video
+- multimodal manifests such as image+text or audio+text rows
+
+Inspection is heuristic rather than guaranteed truth.
+数据检查是启发式推断，不应被视为绝对真值。
 
 ## Boundaries / 边界
 

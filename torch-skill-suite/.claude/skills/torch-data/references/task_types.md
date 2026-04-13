@@ -17,8 +17,8 @@ The `task_type` field in `data_contract` defines what kind of prediction the mod
   - Integer values (0‑based)
   - One‑hot vectors (multi‑label)
   - Strings mapped via `label_map`
-- **Example tasks**: Image classification, sentiment analysis, topic categorization.
-- **Common datasets**: MNIST, CIFAR‑10, IMDB, AG News.
+- **Example tasks**: Image classification, sentiment analysis, topic categorization, audio tagging, action recognition, multimodal moderation.
+- **Common datasets**: MNIST, CIFAR‑10, IMDB, AG News, UrbanSound8K, Kinetics subsets.
 
 ## 2. Detection
 
@@ -47,6 +47,10 @@ The `task_type` field in `data_contract` defines what kind of prediction the mod
   - Polygon annotations (COCO‑style) that need rasterization
 - **Example tasks**: Semantic segmentation, instance segmentation, medical image segmentation.
 - **Common datasets**: Cityscapes, ADE20K, PASCAL VOC segmentation, medical imaging (e.g., BraTS).
+- **Representative contract pattern**:
+  - paired image/mask directories
+  - explicit mask encoding notes in `user_format_spec.details`
+  - `mask_shape` matching post-transform image size
 
 ## 4. Regression
 
@@ -59,51 +63,59 @@ The `task_type` field in `data_contract` defines what kind of prediction the mod
   - Can be single column or multiple columns for multi‑output regression
 - **Example tasks**: Price prediction, age estimation, score prediction, time‑series forecasting.
 - **Common datasets**: Boston Housing, California Housing, custom tabular regression.
+- **Representative contract pattern**:
+  - tabular regression should identify the target column explicitly
+  - time-series regression often combines windowing with proportion-based splits
 
 ## 5. Generation
 
 - **Description**: Produce new data samples similar to the training distribution (unsupervised or conditional).
 - **Output spec**:
-  - `type`: `"sequence"` or `"image"` or `"audio"` (same as input modality)
-  - Often no explicit labels; the target is the input itself (auto‑encoder) or a conditioning signal.
+  - `type`: `"sequence"` or another flexible target representation supported by the current schema
+  - Often no explicit labels; the target is the input itself (auto‑encoder) or a conditioning signal
 - **Label storage**:
   - For conditional generation: conditioning vector or class label
   - For unconditional generation: no labels needed
 - **Example tasks**: Image generation, text generation, music synthesis, style transfer.
 - **Common datasets**: CelebA, LSUN, WikiText, MIDI collections.
+- **Current note**:
+  - Generation is part of the supported task taxonomy, but the current examples focus first on supervised tasks with clearer downstream compatibility.
 
 ## 6. Translation
 
 - **Description**: Transform input from one domain to another (e.g., language translation, image‑to‑image translation).
 - **Output spec**:
-  - `type`: `"sequence"` (for text) or `"image"` (for image translation)
-  - Similar to generation but with paired source–target examples.
+  - `type`: `"sequence"` or another schema-compatible paired target representation
+  - Similar to generation but with paired source–target examples
 - **Label storage**:
   - Paired samples: source file and target file, or parallel corpus for text
 - **Example tasks**: Machine translation, image colorization, sketch‑to‑photo, style transfer.
 - **Common datasets**: WMT, Multi30K, paired image datasets (e.g., maps↔aerial).
+- **Current note**:
+  - Translation contracts should make pairing rules explicit in the data format details, especially when source and target live in different files.
 
 ## 7. Clustering (Unsupervised)
 
 - **Description**: Group similar samples together without pre‑defined labels.
 - **Output spec**:
-  - `type`: `"none"` (no labels)
-  - Usually no output spec needed; the contract only describes input.
+  - Often omitted or kept minimal because labels are not provided ahead of time
 - **Label storage**: None (unsupervised).
 - **Example tasks**: Customer segmentation, anomaly detection, feature learning.
 - **Common datasets**: Any unlabeled dataset.
+- **Current note**:
+  - Clustering remains in the task taxonomy, but the first example expansion focuses on tasks with clearer label structure for validation and downstream compatibility.
 
 ## 8. Reinforcement Learning
 
 - **Description**: Learn a policy by interacting with an environment (states, actions, rewards).
 - **Output spec**:
-  - `type`: `"action"`
-  - `action_space`: discrete (integer) or continuous (vector)
+  - Depends on whether the contract describes offline trajectories, actions, or replay records
 - **Label storage**:
-  - Usually not stored as static dataset; generated online by environment.
-  - Can be logged trajectories (state, action, reward, next_state).
+  - Usually not stored as a static supervised dataset; may come from logged trajectories or replay buffers
 - **Example tasks**: Game playing, robotics control, recommendation systems.
 - **Common datasets**: OpenAI Gym replay buffers, custom logs.
+- **Current note**:
+  - RL is listed in the schema taxonomy but should likely remain a later-stage example because its data representation differs from the standard supervised dataset patterns used elsewhere.
 
 ## Choosing the Right Task Type
 
@@ -116,4 +128,4 @@ The `task_type` field in `data_contract` defines what kind of prediction the mod
 - If you have no labels and want to find groups → `clustering`
 - If you learn from sequential decisions → `reinforcement_learning`
 
-The `output_spec` should reflect the label format your dataset already uses (or will use after preprocessing). `torch-data` will generate Dataset/DataLoader code that respects this spec.
+The `output_spec` should reflect the label format your dataset already uses (or will use after preprocessing). For the current development stage, examples emphasize the task types that most directly support downstream PyTorch project generation: classification, detection, segmentation, and regression.

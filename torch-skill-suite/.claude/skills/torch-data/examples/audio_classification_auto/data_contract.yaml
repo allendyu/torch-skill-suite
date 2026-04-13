@@ -1,0 +1,46 @@
+# Example: Audio classification with auto-inferred format
+# Dataset structure: audio files on disk with labels provided by directory layout or metadata manifest
+
+data_type: audio
+task_type: classification
+input_spec:
+  sample_rate: 16000
+  duration: 5.0                 # target clip duration in seconds
+  shape: [1, 80000]             # channels, samples after clipping/padding
+  dtype: float32
+output_spec:
+  type: categorical
+  num_classes: 8
+  label_map:
+    0: dog_bark
+    1: siren
+    2: drilling
+    3: engine_idling
+    4: gun_shot
+    5: jackhammer
+    6: children_playing
+    7: street_music
+splits:
+  train: data/audio/train
+  val: data/audio/val
+  test: data/audio/test
+preprocessing:
+  - name: resample
+    params: { sample_rate: 16000 }
+  - name: pad_or_trim
+    params: { num_samples: 80000 }
+  - name: to_mel_spectrogram
+    params: { n_mels: 64, hop_length: 512 }
+data_format_option: auto_inferred
+# inferred_format_spec will be filled after inspecting the dataset structure
+# Expected inference:
+# inferred_format_spec:
+#   format_type: AudioFolderWithMetadata
+#   details:
+#     audio_extensions: [".wav", ".flac", ".mp3"]
+#     label_source: "directory names or metadata CSV"
+#     sample_rate_observed: 16000
+metadata:
+  source: "Urban sound classification example"
+  description: "Audio clips grouped into classes for environmental sound recognition."
+  note: "The skill should verify sample-rate consistency and detect the label source during inspection."

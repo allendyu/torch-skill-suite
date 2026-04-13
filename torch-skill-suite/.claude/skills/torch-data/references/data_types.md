@@ -19,12 +19,14 @@ The `data_type` field in `data_contract` determines the primary modality of your
   - COCO JSON (detection/segmentation)
   - YOLO‑style `.txt` per image
   - Plain directory of images with separate annotation files
+  - Paired image/mask directories for segmentation
 - **Preprocessing typical steps**:
   - Resize / crop
   - Normalize (mean/std or scale to [0,1])
   - Color jitter, random flip, rotation (augmentation)
-- **Example `data_type`: `"image"`**
-
+- **Representative examples**:
+  - `image_classification_user`
+  - `image_segmentation_user`
 
 ## 2. Text
 
@@ -39,11 +41,13 @@ The `data_type` field in `data_contract` determines the primary modality of your
   - JSONL (one JSON object per line)
   - Plain text files (one document per file)
   - Hugging Face Datasets
+  - Chat-style JSONL with prompt/response or source/target fields
 - **Preprocessing typical steps**:
   - Tokenization (BERT, GPT, etc.)
   - Padding / truncation
   - Adding special tokens (CLS, SEP, etc.)
-- **Example `data_type`: `"text"`**
+- **Representative examples**:
+  - `text_classification_auto`
 
 ## 3. Time Series
 
@@ -61,7 +65,8 @@ The `data_type` field in `data_contract` determines the primary modality of your
   - Normalization / standardization (per feature or global)
   - Sliding window creation
   - Handling missing values
-- **Example `data_type`: `"time_series"`**
+- **Representative examples**:
+  - `time_series_regression_user`
 
 ## 4. Tabular
 
@@ -74,11 +79,14 @@ The `data_type` field in `data_contract` determines the primary modality of your
   - CSV, Excel, Parquet
   - Pandas DataFrame (pickle)
   - SQL tables
+  - Manifest-style rows with explicit feature columns and target columns
 - **Preprocessing typical steps**:
   - Missing value imputation
   - Feature scaling (standard, min‑max, robust)
   - One‑hot encoding for categoricals
-- **Example `data_type`: `"tabular"`**
+- **Representative examples**:
+  - `tabular_classification`
+  - `tabular_regression_user`
 
 ## 5. Audio
 
@@ -93,12 +101,16 @@ The `data_type` field in `data_contract` determines the primary modality of your
   - WAV, MP3, FLAC files
   - Numpy arrays
   - Librosa‑compatible formats
+  - Directory-per-class layouts with audio files inside
+  - Audio directory plus metadata CSV/JSON manifest
 - **Preprocessing typical steps**:
   - Resampling
   - STFT (spectrogram)
   - Mel‑scale conversion
   - Normalization
-- **Example `data_type`: `"audio"`**
+  - Pad/trim to a target clip length
+- **Representative examples**:
+  - `audio_classification_auto`
 
 ## 6. Video
 
@@ -113,20 +125,33 @@ The `data_type` field in `data_contract` determines the primary modality of your
   - MP4, AVI, MKV files
   - Folder of frame images
   - HDF5 / NPZ arrays
+  - Video directory plus metadata manifest
 - **Preprocessing typical steps**:
   - Frame extraction
   - Resize / crop
   - Temporal subsampling
-- **Example `data_type`: `"video"`**
+  - Clip sampling and padding/truncation
+- **Representative examples**:
+  - `video_classification_auto`
 
 ## 7. Multimodal
 
 - **Description**: Combinations of the above (e.g., image + text, video + audio).
 - **Typical tasks**: VQA, cross‑modal retrieval, multimodal classification.
-- **Input spec fields**: Usually a dictionary of specs per modality.
-- **Common storage formats**: JSON, HDF5, custom directories.
-- **Preprocessing typical steps**: Modality‑specific pipelines plus alignment.
-- **Example `data_type`: `"multimodal"`**
+- **Input spec fields**:
+  - Usually a dictionary of specs per modality
+  - Each modality can carry its own `shape`, `dtype`, sequence length, or sampling fields
+- **Common storage formats**:
+  - JSON / JSONL manifests
+  - HDF5
+  - Custom directories with manifest-driven alignment
+- **Preprocessing typical steps**:
+  - Modality‑specific pipelines plus explicit alignment
+  - Shared sampling or join logic driven by IDs or manifest rows
+- **Representative examples**:
+  - `multimodal_paired_classification_user`
+- **Important note**:
+  - Multimodal contracts should make alignment explicit. Prefer a manifest that defines how image/text/audio/video fields belong to one sample rather than relying on implicit filename matching.
 
 ## Choosing the Right Data Type
 
@@ -138,4 +163,4 @@ The `data_type` field in `data_contract` determines the primary modality of your
 - If your input is a sequence of image frames → `video`
 - If your input combines two or more modalities → `multimodal`
 
-Once you pick the `data_type`, fill the `input_spec` with the relevant fields and choose appropriate `preprocessing` steps.
+Once you pick the `data_type`, fill the `input_spec` with the relevant fields and choose appropriate `preprocessing` steps. For multimodal inputs, describe each modality separately and make pairing/alignment explicit in the format details.

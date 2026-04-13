@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "data_contract",
   "type": "object",
-  "description": "Data contract schema for PyTorch data engineering. Supports multiple data types (image, text, time_series, tabular, audio, video) and task types (classification, detection, segmentation, regression, generation, translation, etc.).",
+  "description": "Data contract schema for PyTorch data engineering. Supports multiple data types (image, text, time_series, tabular, audio, video, multimodal) and task types across broad downstream workflows.",
   "properties": {
     "data_type": {
       "type": "string",
@@ -69,7 +69,7 @@
         },
         "num_classes": {
           "type": "integer",
-          "description": "For classification, number of classes."
+          "description": "For classification or segmentation, number of classes."
         },
         "label_map": {
           "type": "object",
@@ -98,16 +98,16 @@
       "description": "Dataset splits and their paths or proportions.",
       "properties": {
         "train": {
-          "type": ["string", "object"],
-          "description": "Training split path or proportion (0-1)."
+          "type": ["string", "number", "object"],
+          "description": "Training split path, proportion, or structured split definition."
         },
         "val": {
-          "type": ["string", "object"],
-          "description": "Validation split path or proportion."
+          "type": ["string", "number", "object"],
+          "description": "Validation split path, proportion, or structured split definition."
         },
         "test": {
-          "type": ["string", "object"],
-          "description": "Test split path or proportion."
+          "type": ["string", "number", "object"],
+          "description": "Test split path, proportion, or structured split definition."
         }
       },
       "additionalProperties": true,
@@ -121,7 +121,9 @@
         "properties": {
           "name": { "type": "string" },
           "params": { "type": "object" }
-        }
+        },
+        "required": ["name"],
+        "additionalProperties": true
       }
     },
     "data_format_option": {
@@ -135,15 +137,19 @@
       "properties": {
         "format_type": { "type": "string" },
         "details": { "type": "object" }
-      }
+      },
+      "required": ["format_type", "details"],
+      "additionalProperties": true
     },
     "inferred_format_spec": {
       "type": "object",
-      "description": "Required if data_format_option is 'auto_inferred'. Automatically inferred format specification.",
+      "description": "Automatically inferred format specification. May be omitted in pre-inspection contracts even when data_format_option is 'auto_inferred'.",
       "properties": {
         "format_type": { "type": "string" },
         "details": { "type": "object" }
-      }
+      },
+      "required": ["format_type", "details"],
+      "additionalProperties": true
     },
     "metadata": {
       "type": "object",
@@ -151,21 +157,145 @@
       "additionalProperties": true
     }
   },
-  "required": ["data_type", "task_type", "splits"],
-  "dependentRequired": {
-    "user_format_spec": ["data_format_option"],
-    "inferred_format_spec": ["data_format_option"]
-  },
-  "dependentSchemas": {
-    "user_format_spec": {
-      "properties": {
-        "data_format_option": { "const": "user_provided" }
+  "required": ["data_type", "task_type", "input_spec", "output_spec", "splits", "data_format_option"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "data_format_option": { "const": "user_provided" }
+        }
+      },
+      "then": {
+        "required": ["user_format_spec"],
+        "not": {
+          "required": ["inferred_format_spec"]
+        }
       }
     },
-    "inferred_format_spec": {
-      "properties": {
-        "data_format_option": { "const": "auto_inferred" }
+    {
+      "if": {
+        "properties": {
+          "data_format_option": { "const": "auto_inferred" }
+        }
+      },
+      "then": {
+        "not": {
+          "required": ["user_format_spec"]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "task_type": { "const": "classification" }
+        }
+      },
+      "then": {
+        "properties": {
+          "output_spec": {
+            "required": ["type", "num_classes"],
+            "properties": {
+              "type": { "const": "categorical" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "task_type": { "const": "detection" }
+        }
+      },
+      "then": {
+        "properties": {
+          "output_spec": {
+            "required": ["type", "bbox_format"],
+            "properties": {
+              "type": { "const": "bounding_box" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "task_type": { "const": "segmentation" }
+        }
+      },
+      "then": {
+        "properties": {
+          "output_spec": {
+            "required": ["type", "mask_shape", "num_classes"],
+            "properties": {
+              "type": { "const": "mask" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "task_type": { "const": "regression" }
+        }
+      },
+      "then": {
+        "properties": {
+          "output_spec": {
+            "required": ["type", "output_dim"],
+            "properties": {
+              "type": { "const": "continuous" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": { "const": "tabular" }
+        }
+      },
+      "then": {
+        "properties": {
+          "input_spec": {
+            "required": ["num_features"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": { "const": "audio" }
+        }
+      },
+      "then": {
+        "properties": {
+          "input_spec": {
+            "required": ["sample_rate"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_type": { "const": "video" }
+        }
+      },
+      "then": {
+        "properties": {
+          "input_spec": {
+            "anyOf": [
+              { "required": ["fps"] },
+              { "required": ["shape"] }
+            ]
+          }
+        }
       }
     }
-  }
+  ]
 }

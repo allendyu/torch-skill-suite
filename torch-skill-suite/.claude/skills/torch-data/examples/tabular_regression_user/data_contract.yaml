@@ -1,0 +1,38 @@
+# Example: Tabular regression with user-provided format
+# Dataset structure: CSV files with numeric and categorical feature columns plus one target column
+
+data_type: tabular
+task_type: regression
+input_spec:
+  num_features: 18
+  dtype: float32
+output_spec:
+  type: continuous
+  output_dim: 1                 # scalar regression target
+splits:
+  train: data/train.csv
+  val: data/val.csv
+  test: data/test.csv
+preprocessing:
+  - name: impute
+    params:
+      strategy: median
+  - name: encode_categorical
+    params:
+      strategy: one_hot
+  - name: scale
+    params:
+      method: standard
+data_format_option: user_provided
+user_format_spec:
+  format_type: CSV
+  details:
+    header: true
+    target_column: sale_price
+    numeric_columns: [sqft, bedrooms, bathrooms, lot_size, year_built]
+    categorical_columns: [zipcode, condition, heating_type]
+    id_column: listing_id
+metadata:
+  source: "Housing price regression example"
+  description: "Structured tabular dataset for predicting a continuous sale price target."
+  note: "Feature engineering is intentionally minimal so the contract stays model-agnostic."

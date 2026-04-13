@@ -1,0 +1,44 @@
+# Example: Video classification with auto-inferred format
+# Dataset structure: video files stored in split directories, labeled by folder name or manifest
+
+data_type: video
+task_type: classification
+input_spec:
+  shape: [3, 16, 224, 224]      # channels, frames, height, width
+  fps: 30
+  duration: 2.0                 # sampled clip duration in seconds
+  dtype: uint8
+output_spec:
+  type: categorical
+  num_classes: 6
+  label_map:
+    0: walking
+    1: running
+    2: jumping
+    3: waving
+    4: clapping
+    5: sitting
+splits:
+  train: data/videos/train
+  val: data/videos/val
+  test: data/videos/test
+preprocessing:
+  - name: temporal_subsample
+    params: { num_frames: 16, strategy: uniform }
+  - name: resize
+    params: { size: [224, 224] }
+  - name: normalize
+    params: { mean: [0.45, 0.45, 0.45], std: [0.225, 0.225, 0.225] }
+data_format_option: auto_inferred
+# inferred_format_spec will be filled after inspecting the dataset structure
+# Expected inference:
+# inferred_format_spec:
+#   format_type: VideoFolder
+#   details:
+#     video_extensions: [".mp4", ".avi", ".mkv"]
+#     label_source: "directory names or manifest"
+#     frame_sampling: "decode video and sample clips at runtime"
+metadata:
+  source: "Action recognition example"
+  description: "Short videos classified into one action label per clip."
+  note: "The skill should inspect fps consistency and whether labels come from folder names or a metadata file."
