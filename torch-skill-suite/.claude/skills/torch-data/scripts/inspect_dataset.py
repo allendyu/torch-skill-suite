@@ -170,14 +170,56 @@ def read_jsonl_preview(path, max_rows=5):
     return {"columns": columns, "rows": rows}
 
 
+def inspect_coco_payload(path, max_annotations=20):
+    with open(path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    if not isinstance(payload, dict):
+        return {"kind": type(payload).__name__, "columns": [], "rows": []}
+
+    images = payload.get("images")
+    annotations = payload.get("annotations")
+    categories = payload.get("categories")
+    if not isinstance(images, list) or not isinstance(annotations, list):
+        return {"kind": "object", "keys": list(payload.keys()), "rows": []}
+
+    sampled_annotations = [ann for ann in annotations[:max_annotations] if isinstance(ann, dict)]
+    annotation_field_sample = sorted({key for ann in sampled_annotations for key in ann.keys()})
+    has_bbox = any("bbox" in ann and ann.get("bbox") for ann in sampled_annotations)
+    has_segmentation = any("segmentation" in ann and ann.get("segmentation") for ann in sampled_annotations)
+    if has_bbox and has_segmentation:
+        task_hint = "mixed"
+    elif has_segmentation:
+        task_hint = "segmentation"
+    elif has_bbox:
+        task_hint = "detection"
+    else:
+        task_hint = "unknown"
+
+    return {
+        "kind": "coco_like",
+        "columns": ["images", "annotations", "categories"],
+        "rows": [],
+        "image_count": len(images),
+        "annotation_count": len(annotations),
+        "category_count": len(categories) if isinstance(categories, list) else 0,
+        "annotation_field_sample": annotation_field_sample,
+        "has_bbox": has_bbox,
+        "has_segmentation": has_segmentation,
+        "task_hint": task_hint,
+    }
+
+
 def read_json_preview(path):
+    preview = inspect_coco_payload(path)
+    if preview.get("kind") == "coco_like":
+        return preview
+
     with open(path, "r", encoding="utf-8") as f:
         payload = json.load(f)
     if isinstance(payload, list) and payload and isinstance(payload[0], dict):
         return {"kind": "list_of_objects", "columns": list(payload[0].keys()), "rows": payload[:5]}
     if isinstance(payload, dict):
-        if payload.get("annotations") and payload.get("images"):
-            return {"kind": "coco_like", "columns": ["images", "annotations", "categories"], "rows": []}
         return {"kind": "object", "keys": list(payload.keys()), "rows": []}
     return {"kind": type(payload).__name__, "columns": [], "rows": []}
 
@@ -293,6 +335,77 @@ def inspect_manifest_for_modalities(path):
     }, format_type
 
 
+def collect_relative_stems(path, suffixes):
+    stems = {}
+    for item in path.rglob("*"):
+        if item.is_file() and item.suffix.lower() in suffixes:
+            rel = item.relative_to(path)
+            stems[str(rel.with_suffix(""))] = item
+    return stems
+
+
+def validate_yolo_label_dir(label_dir, max_files=5):
+    label_files = sorted([p for p in label_dir.rglob("*.txt") if p.is_file()])
+    sampled = label_files[:max_files]
+    invalid_examples = []
+    valid_files = 0
+    invalid_files = 0
+
+    for label_file in sampled:
+        lines = [line.strip() for line in label_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        file_valid = True
+        if not lines:
+            file_valid = False
+            invalid_examples.append({"file": str(label_file), "reason": "Label file is empty."})
+        for line in lines:
+            parts = line.split()
+            if len(parts) != 5:
+                file_valid = False
+                invalid_examples.append({"file": str(label_file), "reason": f"Expected 5 columns, got {len(parts)}"})
+                break
+            try:
+                int(parts[0])
+                coords = [float(value) for value in parts[1:]]
+            except ValueError:
+                file_valid = False
+                invalid_examples.append({"file": str(label_file), "reason": "Class id or coordinates are not numeric."})
+                break
+            if any(value < 0 or value > 1 for value in coords):
+                file_valid = False
+                invalid_examples.append({"file": str(label_file), "reason": "Coordinates are not normalized to [0, 1]."})
+                break
+        if file_valid:
+            valid_files += 1
+        else:
+            invalid_files += 1
+
+    return {
+        "sampled_files": len(sampled),
+        "valid_files": valid_files,
+        "invalid_files": invalid_files,
+        "invalid_examples": invalid_examples[:3],
+        "sampled_paths": [str(path) for path in sampled],
+    }
+
+
+def evaluate_image_mask_pairing(image_dir, mask_dir):
+    image_stems = collect_relative_stems(image_dir, IMAGE_EXTS)
+    mask_stems = collect_relative_stems(mask_dir, IMAGE_EXTS | {".gif", ".tif"})
+    matched = sorted(set(image_stems) & set(mask_stems))
+    image_only = sorted(set(image_stems) - set(mask_stems))
+    mask_only = sorted(set(mask_stems) - set(image_stems))
+    total = max(len(image_stems), len(mask_stems), 1)
+    pairing_rate = len(matched) / total
+    return {
+        "image_count": len(image_stems),
+        "mask_count": len(mask_stems),
+        "matched_pairs": len(matched),
+        "pairing_rate": round(pairing_rate, 4),
+        "image_only_examples": sample_sequence(image_only, 3),
+        "mask_only_examples": sample_sequence(mask_only, 3),
+    }
+
+
 def inspect_image_classification(path):
     path = Path(path)
     if not path.exists():
@@ -352,16 +465,30 @@ def inspect_image_segmentation(path):
     if path.is_dir():
         json_files = files_with_suffixes(path, {".json"})
         if json_files:
-            return make_result(
-                "COCO",
-                {
-                    "annotation_file": str(json_files[0]),
-                    "task_hint": "segmentation",
-                },
-                confidence="medium",
-                warnings=["COCO JSON detected; confirm whether segmentation polygons or masks are used."],
-                missing_information=["Need confirmation of mask/polygon encoding and image root path."],
-            ), None
+            preview = inspect_coco_payload(json_files[0])
+            if preview.get("kind") == "coco_like":
+                warnings = []
+                confidence = "medium"
+                if preview["task_hint"] == "detection":
+                    warnings.append("COCO JSON appears bbox-focused; confirm this dataset is for segmentation.")
+                    confidence = "low"
+                elif preview["task_hint"] == "mixed":
+                    warnings.append("COCO JSON includes both bbox and segmentation evidence; confirm the intended task.")
+                    confidence = "medium"
+                return make_result(
+                    "COCO_segmentation" if preview["task_hint"] == "segmentation" else "COCO",
+                    {
+                        "annotation_file": str(json_files[0]),
+                        "task_hint": preview["task_hint"],
+                        "image_count": preview["image_count"],
+                        "annotation_count": preview["annotation_count"],
+                        "category_count": preview["category_count"],
+                    },
+                    confidence=confidence,
+                    warnings=warnings,
+                    observed_fields={"annotation_field_sample": preview["annotation_field_sample"]},
+                    missing_information=["Need confirmation of mask/polygon encoding and image root path."],
+                ), None
 
         dirs = [d for d in path.rglob("*") if d.is_dir()]
         image_dirs = [d for d in dirs if "image" in d.name.lower()]
@@ -370,23 +497,24 @@ def inspect_image_segmentation(path):
             for mask_dir in mask_dirs:
                 if image_dir == mask_dir:
                     continue
-                mask_files = [p for p in mask_dir.rglob("*") if p.is_file()]
-                image_files = [p for p in image_dir.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
-                if image_files and mask_files:
+                pairing = evaluate_image_mask_pairing(image_dir, mask_dir)
+                if pairing["image_count"] and pairing["mask_count"]:
+                    confidence = "high" if pairing["pairing_rate"] >= 0.9 else "medium"
+                    warnings = []
+                    if pairing["pairing_rate"] < 0.9:
+                        warnings.append("Image/mask pairing is incomplete; confirm basename alignment before training.")
                     return make_result(
                         "ImageMaskPairs",
                         {
                             "image_dir": str(image_dir),
                             "mask_dir": str(mask_dir),
                             "pairing_rule": "Match image and mask by relative path and basename.",
-                            "image_extensions": sorted({p.suffix.lower() for p in image_files}),
-                            "mask_extensions": sorted({p.suffix.lower() for p in mask_files}),
+                            "image_extensions": sorted({p.suffix.lower() for p in image_dir.rglob('*') if p.is_file() and p.suffix.lower() in IMAGE_EXTS}),
+                            "mask_extensions": sorted({p.suffix.lower() for p in mask_dir.rglob('*') if p.is_file()}),
                         },
-                        confidence="high",
-                        observed_fields={
-                            "image_count_sampled": min(len(image_files), 20),
-                            "mask_count_sampled": min(len(mask_files), 20),
-                        },
+                        confidence=confidence,
+                        warnings=warnings,
+                        observed_fields=pairing,
                         missing_information=["Need confirmation of mask encoding (single-channel class indices vs RGB colors)."],
                     ), None
 
@@ -402,6 +530,15 @@ def inspect_detection(path):
         image_dirs = [d for d in path.iterdir() if d.is_dir() and "image" in d.name.lower()]
         label_dirs = [d for d in path.iterdir() if d.is_dir() and "label" in d.name.lower()]
         if image_dirs and label_dirs:
+            label_validation = validate_yolo_label_dir(label_dirs[0])
+            warnings = []
+            confidence = "high"
+            if label_validation["sampled_files"] == 0:
+                confidence = "low"
+                warnings.append("YOLO-style folders found, but no label .txt files were sampled.")
+            elif label_validation["invalid_files"]:
+                confidence = "medium" if label_validation["valid_files"] else "low"
+                warnings.append("Some sampled YOLO label files are malformed; verify annotation quality.")
             return make_result(
                 "YOLO",
                 {
@@ -409,19 +546,44 @@ def inspect_detection(path):
                     "label_dir": str(label_dirs[0]),
                     "label_suffix": ".txt",
                 },
-                confidence="high",
+                confidence=confidence,
+                warnings=warnings,
+                observed_fields={"yolo_label_validation": label_validation},
+                missing_information=["Need confirmation of class file location and split layout if labels are stored outside the sampled directory."],
             ), None
 
         json_files = files_with_suffixes(path, {".json"})
         if json_files:
-            return make_result(
-                "COCO",
-                {
-                    "annotation_file": str(json_files[0]),
-                },
-                confidence="medium",
-                missing_information=["Need confirmation that the JSON file contains detection boxes rather than segmentation polygons only."],
-            ), None
+            preview = inspect_coco_payload(json_files[0])
+            if preview.get("kind") == "coco_like":
+                warnings = []
+                confidence = "medium"
+                format_type = "COCO_detection"
+                if preview["task_hint"] == "segmentation":
+                    confidence = "low"
+                    format_type = "COCO"
+                    warnings.append("COCO JSON appears segmentation-focused; confirm this dataset is for detection.")
+                elif preview["task_hint"] == "mixed":
+                    format_type = "COCO_mixed"
+                    warnings.append("COCO JSON includes both bbox and segmentation evidence; confirm the intended detection task.")
+                elif preview["task_hint"] == "unknown":
+                    confidence = "low"
+                    format_type = "COCO_like_unknown"
+                    warnings.append("COCO-like JSON detected, but sampled annotations did not clearly indicate bbox usage.")
+                return make_result(
+                    format_type,
+                    {
+                        "annotation_file": str(json_files[0]),
+                        "task_hint": preview["task_hint"],
+                        "image_count": preview["image_count"],
+                        "annotation_count": preview["annotation_count"],
+                        "category_count": preview["category_count"],
+                    },
+                    confidence=confidence,
+                    warnings=warnings,
+                    observed_fields={"annotation_field_sample": preview["annotation_field_sample"]},
+                    missing_information=["Need confirmation that the JSON file contains detection boxes rather than segmentation polygons only."],
+                ), None
 
     return None, "Could not infer detection format"
 

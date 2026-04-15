@@ -17,6 +17,7 @@ built-in YAML subset parser and built-in validation for the current
 import argparse
 import ast
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -339,81 +340,238 @@ class SimpleYAMLParser:
         return self._parse_scalar(text)
 
 
-
 def load_yaml(file_path):
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         text = f.read()
     if yaml is not None:
         return yaml.safe_load(text)
     return SimpleYAMLParser(text).parse()
 
 
-
 def load_json(file_path):
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+
+def path_to_string(path_parts):
+    if not path_parts:
+        return "<root>"
+    parts = []
+    for part in path_parts:
+        if isinstance(part, int):
+            if parts:
+                parts[-1] = f"{parts[-1]}[{part}]"
+            else:
+                parts.append(f"[{part}]")
+        else:
+            parts.append(str(part))
+    return ".".join(parts)
+
+
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def normalize_split_entry(entry):
+    if isinstance(entry, str):
+        return "string"
+    if isinstance(entry, dict):
+        return "object"
+    if is_number(entry):
+        return "number"
+    return type(entry).__name__
+
+
+def validate_positive_integer(value, field_name, errors, allow_negative_one=False):
+    if value is None:
+        return
+    if not isinstance(value, int) or isinstance(value, bool):
+        errors.append(f"{field_name}: expected integer")
+        return
+    if allow_negative_one and value == -1:
+        return
+    if value < 1:
+        errors.append(f"{field_name}: must be >= 1")
+
+
+def validate_positive_number(value, field_name, errors):
+    if value is None:
+        return
+    if not is_number(value):
+        errors.append(f"{field_name}: expected number")
+        return
+    if value <= 0:
+        errors.append(f"{field_name}: must be > 0")
+
+
+def validate_positive_shape(values, field_name, errors):
+    if values is None:
+        return
+    if not isinstance(values, list):
+        errors.append(f"{field_name}: expected array")
+        return
+    for idx, item in enumerate(values):
+        if not isinstance(item, int) or isinstance(item, bool):
+            errors.append(f"{field_name}[{idx}]: expected integer")
+        elif item < 1:
+            errors.append(f"{field_name}[{idx}]: must be >= 1")
+
+
+def semantic_validate_contract(contract_data, strict_handoff=False):
+    errors = []
+
+    if not isinstance(contract_data, dict):
+        return ["<root>: contract must be a mapping/object"]
+
+    input_spec = contract_data.get("input_spec") if isinstance(contract_data.get("input_spec"), dict) else None
+    output_spec = contract_data.get("output_spec") if isinstance(contract_data.get("output_spec"), dict) else None
+    splits = contract_data.get("splits") if isinstance(contract_data.get("splits"), dict) else None
+    inferred_format_spec = contract_data.get("inferred_format_spec") if isinstance(contract_data.get("inferred_format_spec"), dict) else None
+    user_format_spec = contract_data.get("user_format_spec") if isinstance(contract_data.get("user_format_spec"), dict) else None
+
+    if input_spec is not None:
+        validate_positive_shape(input_spec.get("shape"), "input_spec.shape", errors)
+        validate_positive_integer(input_spec.get("vocab_size"), "input_spec.vocab_size", errors)
+        validate_positive_integer(input_spec.get("num_features"), "input_spec.num_features", errors)
+        validate_positive_integer(input_spec.get("sample_rate"), "input_spec.sample_rate", errors)
+        validate_positive_integer(input_spec.get("fps"), "input_spec.fps", errors)
+        validate_positive_integer(input_spec.get("sequence_length"), "input_spec.sequence_length", errors, allow_negative_one=True)
+        validate_positive_number(input_spec.get("duration"), "input_spec.duration", errors)
+
+    if output_spec is not None:
+        validate_positive_integer(output_spec.get("num_classes"), "output_spec.num_classes", errors)
+        validate_positive_shape(output_spec.get("mask_shape"), "output_spec.mask_shape", errors)
+        validate_positive_integer(output_spec.get("output_dim"), "output_spec.output_dim", errors)
+
+        label_map = output_spec.get("label_map")
+        num_classes = output_spec.get("num_classes")
+        if label_map is not None:
+            if not isinstance(label_map, dict):
+                errors.append("output_spec.label_map: expected object")
+            else:
+                parsed_keys = []
+                for key in label_map.keys():
+                    try:
+                        parsed_keys.append(int(key))
+                    except (TypeError, ValueError):
+                        errors.append(f"output_spec.label_map.{key}: key must be integer-like")
+                if parsed_keys:
+                    expected_keys = list(range(len(parsed_keys)))
+                    if sorted(parsed_keys) != expected_keys:
+                        errors.append("output_spec.label_map: keys must be contiguous starting at 0")
+                if isinstance(num_classes, int) and not isinstance(num_classes, bool) and len(label_map) != num_classes:
+                    errors.append(
+                        f"output_spec.label_map: expected {num_classes} entries to match output_spec.num_classes, got {len(label_map)}"
+                    )
+
+    if splits is not None:
+        numeric_values = []
+        split_kinds = set()
+        for split_name in ("train", "val", "test"):
+            if split_name not in splits:
+                continue
+            entry = splits[split_name]
+            kind = normalize_split_entry(entry)
+            split_kinds.add(kind)
+            if kind == "number":
+                numeric_values.append((split_name, entry))
+                if entry <= 0 or entry > 1:
+                    errors.append(f"splits.{split_name}: numeric split must be > 0 and <= 1")
+        if "number" in split_kinds and len(split_kinds - {"number"}) > 0:
+            errors.append("splits: mixed numeric and path/object split definitions are not allowed")
+        if len(numeric_values) > 1:
+            total = sum(value for _, value in numeric_values)
+            if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1e-6):
+                errors.append(f"splits: numeric split proportions must sum to 1.0, got {total:.6f}")
+
+    if contract_data.get("data_type") == "multimodal" and inferred_format_spec is not None:
+        details = inferred_format_spec.get("details")
+        if isinstance(details, dict) and "modalities" in details:
+            modalities = details.get("modalities")
+            if not isinstance(modalities, list) or len(modalities) < 2:
+                errors.append("inferred_format_spec.details.modalities: multimodal contracts require at least two modalities")
+
+    if strict_handoff and contract_data.get("data_format_option") == "auto_inferred":
+        if inferred_format_spec is None:
+            errors.append("inferred_format_spec: required when --strict-handoff is enabled for auto_inferred contracts")
+        else:
+            format_type = inferred_format_spec.get("format_type")
+            details = inferred_format_spec.get("details")
+            if not isinstance(format_type, str) or not format_type.strip():
+                errors.append("inferred_format_spec.format_type: required when --strict-handoff is enabled")
+            if not isinstance(details, dict) or not details:
+                errors.append("inferred_format_spec.details: non-empty object required when --strict-handoff is enabled")
+
+    if strict_handoff and contract_data.get("data_format_option") == "user_provided" and user_format_spec is not None:
+        format_type = user_format_spec.get("format_type")
+        details = user_format_spec.get("details")
+        if not isinstance(format_type, str) or not format_type.strip():
+            errors.append("user_format_spec.format_type: required when --strict-handoff is enabled")
+        if not isinstance(details, dict) or not details:
+            errors.append("user_format_spec.details: non-empty object required when --strict-handoff is enabled")
+
+    return errors
 
 
 def _fallback_validate_contract(contract_data):
     errors = []
 
     if not isinstance(contract_data, dict):
-        return False, ["Contract must be a mapping/object."]
+        return False, ["<root>: contract must be a mapping/object"]
 
     required_fields = ["data_type", "task_type", "input_spec", "output_spec", "splits", "data_format_option"]
     for field in required_fields:
         if field not in contract_data:
-            errors.append(f"Missing required field: {field}")
+            errors.append(f"{field}: missing required field")
 
     data_type = contract_data.get("data_type")
     if data_type is not None and data_type not in VALID_DATA_TYPES:
-        errors.append(f"Invalid data_type: {data_type}")
+        errors.append(f"data_type: invalid value {data_type}")
 
     task_type = contract_data.get("task_type")
     if task_type is not None and task_type not in VALID_TASK_TYPES:
-        errors.append(f"Invalid task_type: {task_type}")
+        errors.append(f"task_type: invalid value {task_type}")
 
     input_spec = contract_data.get("input_spec")
     if input_spec is not None and not isinstance(input_spec, dict):
-        errors.append("input_spec must be an object.")
+        errors.append("input_spec: must be an object")
 
     output_spec = contract_data.get("output_spec")
     if output_spec is not None:
         if not isinstance(output_spec, dict):
-            errors.append("output_spec must be an object.")
+            errors.append("output_spec: must be an object")
         else:
             output_type = output_spec.get("type")
             if output_type is not None and output_type not in VALID_OUTPUT_TYPES:
-                errors.append(f"Invalid output_spec.type: {output_type}")
+                errors.append(f"output_spec.type: invalid value {output_type}")
             bbox_format = output_spec.get("bbox_format")
             if bbox_format is not None and bbox_format not in VALID_BBOX_FORMATS:
-                errors.append(f"Invalid output_spec.bbox_format: {bbox_format}")
+                errors.append(f"output_spec.bbox_format: invalid value {bbox_format}")
 
     splits = contract_data.get("splits")
     if splits is not None:
         if not isinstance(splits, dict):
-            errors.append("splits must be an object.")
+            errors.append("splits: must be an object")
         elif "train" not in splits:
-            errors.append("splits must include train.")
+            errors.append("splits.train: missing required field")
 
     preprocessing = contract_data.get("preprocessing")
     if preprocessing is not None:
         if not isinstance(preprocessing, list):
-            errors.append("preprocessing must be an array.")
+            errors.append("preprocessing: must be an array")
         else:
             for idx, step in enumerate(preprocessing):
                 if not isinstance(step, dict):
-                    errors.append(f"preprocessing[{idx}] must be an object.")
+                    errors.append(f"preprocessing[{idx}]: must be an object")
                     continue
                 if "name" not in step:
-                    errors.append(f"preprocessing[{idx}] is missing required field: name")
+                    errors.append(f"preprocessing[{idx}].name: missing required field")
                 if "params" in step and not isinstance(step["params"], dict):
-                    errors.append(f"preprocessing[{idx}].params must be an object.")
+                    errors.append(f"preprocessing[{idx}].params: must be an object")
 
     data_format_option = contract_data.get("data_format_option")
     if data_format_option not in {None, "user_provided", "auto_inferred"}:
-        errors.append(f"Invalid data_format_option: {data_format_option}")
+        errors.append(f"data_format_option: invalid value {data_format_option}")
 
     user_format_spec = contract_data.get("user_format_spec")
     inferred_format_spec = contract_data.get("inferred_format_spec")
@@ -421,77 +579,95 @@ def _fallback_validate_contract(contract_data):
     for field_name, value in (("user_format_spec", user_format_spec), ("inferred_format_spec", inferred_format_spec)):
         if value is not None:
             if not isinstance(value, dict):
-                errors.append(f"{field_name} must be an object.")
+                errors.append(f"{field_name}: must be an object")
             else:
                 if "format_type" not in value:
-                    errors.append(f"{field_name} is missing required field: format_type")
+                    errors.append(f"{field_name}.format_type: missing required field")
                 if "details" not in value:
-                    errors.append(f"{field_name} is missing required field: details")
+                    errors.append(f"{field_name}.details: missing required field")
                 elif not isinstance(value["details"], dict):
-                    errors.append(f"{field_name}.details must be an object.")
+                    errors.append(f"{field_name}.details: must be an object")
 
     if data_format_option == "user_provided":
         if user_format_spec is None:
-            errors.append("data_format_option=user_provided requires user_format_spec.")
+            errors.append("user_format_spec: required when data_format_option=user_provided")
         if inferred_format_spec is not None:
-            errors.append("data_format_option=user_provided must not include inferred_format_spec.")
+            errors.append("inferred_format_spec: must not be present when data_format_option=user_provided")
     elif data_format_option == "auto_inferred":
         if user_format_spec is not None:
-            errors.append("data_format_option=auto_inferred must not include user_format_spec.")
+            errors.append("user_format_spec: must not be present when data_format_option=auto_inferred")
 
     if task_type == "classification" and isinstance(output_spec, dict):
         if output_spec.get("type") != "categorical":
-            errors.append("classification requires output_spec.type=categorical.")
+            errors.append("output_spec.type: classification requires categorical")
         if "num_classes" not in output_spec:
-            errors.append("classification requires output_spec.num_classes.")
+            errors.append("output_spec.num_classes: required for classification")
 
     if task_type == "detection" and isinstance(output_spec, dict):
         if output_spec.get("type") != "bounding_box":
-            errors.append("detection requires output_spec.type=bounding_box.")
+            errors.append("output_spec.type: detection requires bounding_box")
         if "bbox_format" not in output_spec:
-            errors.append("detection requires output_spec.bbox_format.")
+            errors.append("output_spec.bbox_format: required for detection")
 
     if task_type == "segmentation" and isinstance(output_spec, dict):
         if output_spec.get("type") != "mask":
-            errors.append("segmentation requires output_spec.type=mask.")
+            errors.append("output_spec.type: segmentation requires mask")
         if "mask_shape" not in output_spec:
-            errors.append("segmentation requires output_spec.mask_shape.")
+            errors.append("output_spec.mask_shape: required for segmentation")
         if "num_classes" not in output_spec:
-            errors.append("segmentation requires output_spec.num_classes.")
+            errors.append("output_spec.num_classes: required for segmentation")
 
     if task_type == "regression" and isinstance(output_spec, dict):
         if output_spec.get("type") != "continuous":
-            errors.append("regression requires output_spec.type=continuous.")
+            errors.append("output_spec.type: regression requires continuous")
         if "output_dim" not in output_spec:
-            errors.append("regression requires output_spec.output_dim.")
+            errors.append("output_spec.output_dim: required for regression")
 
     if data_type == "tabular" and isinstance(input_spec, dict) and "num_features" not in input_spec:
-        errors.append("tabular data requires input_spec.num_features.")
+        errors.append("input_spec.num_features: required for tabular data")
 
     if data_type == "audio" and isinstance(input_spec, dict) and "sample_rate" not in input_spec:
-        errors.append("audio data requires input_spec.sample_rate.")
+        errors.append("input_spec.sample_rate: required for audio data")
 
     if data_type == "video" and isinstance(input_spec, dict):
         if "fps" not in input_spec and "shape" not in input_spec:
-            errors.append("video data requires input_spec.fps or input_spec.shape.")
+            errors.append("input_spec: video data requires fps or shape")
 
     return len(errors) == 0, errors
 
 
+def collect_schema_errors(contract_data, schema_data):
+    if jsonschema is None:
+        return []
 
-def validate_contract(contract_data, schema_data):
-    """Validate contract against schema, return (is_valid, errors)."""
+    try:
+        validator = jsonschema.Draft202012Validator(schema_data)
+    except jsonschema.exceptions.SchemaError as e:
+        return [f"<schema>: invalid schema - {e.message}"]
+
+    errors = []
+    for error in sorted(validator.iter_errors(contract_data), key=lambda err: list(err.absolute_path)):
+        path = path_to_string(error.absolute_path)
+        errors.append(f"{path}: {error.message}")
+    return errors
+
+
+def validate_contract(contract_data, schema_data, strict_handoff=False):
+    """Validate contract against schema and semantic rules, return (is_valid, errors)."""
     if jsonschema is not None:
-        try:
-            jsonschema.validate(instance=contract_data, schema=schema_data)
-            return True, []
-        except jsonschema.exceptions.ValidationError as e:
-            return False, [str(e)]
-        except jsonschema.exceptions.SchemaError as e:
-            return False, [f"Schema error: {e}"]
+        errors = collect_schema_errors(contract_data, schema_data)
+    else:
+        _, errors = _fallback_validate_contract(contract_data)
 
-    return _fallback_validate_contract(contract_data)
+    errors.extend(semantic_validate_contract(contract_data, strict_handoff=strict_handoff))
 
+    deduped_errors = []
+    seen = set()
+    for error in errors:
+        if error not in seen:
+            deduped_errors.append(error)
+            seen.add(error)
+    return len(deduped_errors) == 0, deduped_errors
 
 
 def resolve_default_schema_path(script_dir):
@@ -506,21 +682,19 @@ def resolve_default_schema_path(script_dir):
     return None
 
 
-
-def validate_path(contract_path, schema):
+def validate_path(contract_path, schema, strict_handoff=False):
     contract = load_yaml(contract_path)
-    return validate_contract(contract, schema)
+    return validate_contract(contract, schema, strict_handoff=strict_handoff)
 
 
-
-def validate_example_suite(examples_root, schema):
+def validate_example_suite(examples_root, schema, strict_handoff=False):
     example_files = sorted(examples_root.glob("*/data_contract.yaml"))
     if not example_files:
         return False, [f"No example contracts found under: {examples_root}"]
 
     failures = []
     for example_file in example_files:
-        is_valid, errors = validate_path(example_file, schema)
+        is_valid, errors = validate_path(example_file, schema, strict_handoff=strict_handoff)
         if is_valid:
             print(f"✓ {example_file}")
         else:
@@ -532,15 +706,14 @@ def validate_example_suite(examples_root, schema):
     return len(failures) == 0, failures
 
 
-
-def validate_shared_catalog(catalog_path, schema):
+def validate_shared_catalog(catalog_path, schema, strict_handoff=False):
     catalog = load_yaml(catalog_path)
     if not isinstance(catalog, dict) or not catalog:
         return False, [(str(catalog_path), ["Shared catalog is empty or not a mapping."])]
 
     failures = []
     for example_name, contract in catalog.items():
-        is_valid, errors = validate_contract(contract, schema)
+        is_valid, errors = validate_contract(contract, schema, strict_handoff=strict_handoff)
         if is_valid:
             print(f"✓ {catalog_path}::{example_name}")
         else:
@@ -552,7 +725,6 @@ def validate_shared_catalog(catalog_path, schema):
     return len(failures) == 0, failures
 
 
-
 def main():
     parser = argparse.ArgumentParser(description="Validate data contract YAML files.")
     parser.add_argument("--contract", help="Path to one data_contract.yaml file")
@@ -560,6 +732,7 @@ def main():
     parser.add_argument("--validate-examples", action="store_true", help="Validate all standalone example contracts")
     parser.add_argument("--validate-shared-catalog", action="store_true", help="Validate each example entry in the shared catalog")
     parser.add_argument("--validate-all", action="store_true", help="Validate standalone examples and shared catalog examples")
+    parser.add_argument("--strict-handoff", action="store_true", help="Require downstream-ready contracts, including inferred_format_spec for auto_inferred entries")
     args = parser.parse_args()
 
     if not any([args.contract, args.validate_examples, args.validate_shared_catalog, args.validate_all]):
@@ -593,7 +766,7 @@ def main():
             print(f"Error: Contract file not found: {contract_path}")
             sys.exit(1)
 
-        is_valid, errors = validate_path(contract_path, schema)
+        is_valid, errors = validate_path(contract_path, schema, strict_handoff=args.strict_handoff)
         if is_valid:
             print("✓ Contract is valid.")
         else:
@@ -604,7 +777,7 @@ def main():
 
     if args.validate_examples or args.validate_all:
         examples_root = script_dir.parent / "examples"
-        is_valid, failures = validate_example_suite(examples_root, schema)
+        is_valid, failures = validate_example_suite(examples_root, schema, strict_handoff=args.strict_handoff)
         success = success and is_valid
         if is_valid:
             print("✓ All standalone example contracts are valid.")
@@ -613,7 +786,7 @@ def main():
 
     if args.validate_shared_catalog or args.validate_all:
         catalog_path = script_dir / "../../../../shared/contracts/data_contract.example.yaml"
-        is_valid, failures = validate_shared_catalog(catalog_path, schema)
+        is_valid, failures = validate_shared_catalog(catalog_path, schema, strict_handoff=args.strict_handoff)
         success = success and is_valid
         if is_valid:
             print("✓ All shared catalog examples are valid.")

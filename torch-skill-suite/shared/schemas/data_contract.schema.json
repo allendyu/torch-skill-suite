@@ -3,6 +3,23 @@
   "title": "data_contract",
   "type": "object",
   "description": "Data contract schema for PyTorch data engineering. Supports multiple data types (image, text, time_series, tabular, audio, video, multimodal) and task types across broad downstream workflows.",
+  "$defs": {
+    "splitEntry": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        {
+          "type": "object"
+        }
+      ]
+    }
+  },
   "properties": {
     "data_type": {
       "type": "string",
@@ -20,7 +37,7 @@
       "properties": {
         "shape": {
           "type": "array",
-          "items": { "type": "integer" },
+          "items": { "type": "integer", "minimum": 1 },
           "description": "Shape of a single input sample (e.g., [channels, height, width] for images, [sequence_length] for text, [time_steps, features] for time series)."
         },
         "dtype": {
@@ -32,27 +49,35 @@
           "description": "For image data, whether channels come first (C, H, W) or last (H, W, C). Default true for PyTorch."
         },
         "sequence_length": {
-          "type": "integer",
+          "anyOf": [
+            { "const": -1 },
+            { "type": "integer", "minimum": 1 }
+          ],
           "description": "For text or time series, fixed sequence length (or -1 for variable)."
         },
         "vocab_size": {
           "type": "integer",
+          "minimum": 1,
           "description": "For text, vocabulary size."
         },
         "num_features": {
           "type": "integer",
+          "minimum": 1,
           "description": "For tabular data, number of features."
         },
         "sample_rate": {
           "type": "integer",
+          "minimum": 1,
           "description": "For audio, sample rate in Hz."
         },
         "duration": {
           "type": "number",
+          "exclusiveMinimum": 0,
           "description": "For audio/video, duration in seconds."
         },
         "fps": {
           "type": "integer",
+          "minimum": 1,
           "description": "For video, frames per second."
         }
       },
@@ -69,6 +94,7 @@
         },
         "num_classes": {
           "type": "integer",
+          "minimum": 1,
           "description": "For classification or segmentation, number of classes."
         },
         "label_map": {
@@ -83,11 +109,12 @@
         },
         "mask_shape": {
           "type": "array",
-          "items": { "type": "integer" },
+          "items": { "type": "integer", "minimum": 1 },
           "description": "For segmentation, shape of mask (height, width)."
         },
         "output_dim": {
           "type": "integer",
+          "minimum": 1,
           "description": "For regression, dimension of continuous output."
         }
       },
@@ -98,15 +125,15 @@
       "description": "Dataset splits and their paths or proportions.",
       "properties": {
         "train": {
-          "type": ["string", "number", "object"],
+          "$ref": "#/$defs/splitEntry",
           "description": "Training split path, proportion, or structured split definition."
         },
         "val": {
-          "type": ["string", "number", "object"],
+          "$ref": "#/$defs/splitEntry",
           "description": "Validation split path, proportion, or structured split definition."
         },
         "test": {
-          "type": ["string", "number", "object"],
+          "$ref": "#/$defs/splitEntry",
           "description": "Test split path, proportion, or structured split definition."
         }
       },
