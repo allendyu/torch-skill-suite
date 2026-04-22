@@ -1,0 +1,45 @@
+task_type: classification
+data_type: image
+
+input_spec:
+  shape: [3, 224, 224]
+  dtype: float32
+  channels_first: true
+
+model_spec:
+  family: cnn
+  architecture: efficientnet
+  backbone: efficientnet_b0
+  pretrained: true
+  in_channels: 3
+  feature_dim: 1280
+
+head_spec:
+  type: linear_cls
+  num_classes: 5
+  pooling: avg
+  dropout: 0.2
+
+forward_spec:
+  input_tensor_name: images
+  output_tensor_name: logits
+  output_shape: [batch, 5]
+
+compatibility:
+  expected_target_type: categorical
+  expected_loss: cross_entropy
+  target_dtype: int64
+  output_activation: none
+
+constraints:
+  latency_tier: fast
+  model_size_mb: 21
+
+artifacts:
+  template_name: image_classification/efficientnet
+  smoke_test_required: true
+
+metadata:
+  route: image_classification
+  priority: P0
+  description: "EfficientNet-B0 for mobile scenarios"

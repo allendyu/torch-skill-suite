@@ -1,5 +1,195 @@
-backbone: resnet50
-head: linear_cls
-num_classes: 10
-pretrained: true
-loss: cross_entropy
+# Example model contracts for image classification (P0 route).
+# Each example corresponds to a different backbone selection scenario.
+# All examples should pass validation against model_contract.schema.json.
+
+# --- Example 1: ResNet34 (balanced default) ---
+image_classification_resnet34:
+  task_type: classification
+  data_type: image
+
+  input_spec:
+    shape: [3, 224, 224]
+    dtype: float32
+    channels_first: true
+
+  model_spec:
+    family: cnn
+    architecture: resnet
+    backbone: resnet34
+    pretrained: true
+    in_channels: 3
+    feature_dim: 512
+
+  head_spec:
+    type: linear_cls
+    num_classes: 3
+    pooling: avg
+    dropout: 0.0
+
+  forward_spec:
+    input_tensor_name: images
+    output_tensor_name: logits
+    output_shape: [batch, 3]
+
+  compatibility:
+    expected_target_type: categorical
+    expected_loss: cross_entropy
+    target_dtype: int64
+    output_activation: none
+
+  constraints:
+    latency_tier: balanced
+    model_size_mb: 85
+
+  artifacts:
+    template_name: image_classification/resnet
+    smoke_test_required: true
+
+  metadata:
+    route: image_classification
+    priority: P0
+    description: "ResNet34 for balanced latency/accuracy tradeoff"
+
+# --- Example 2: ResNet18 (low latency / small model) ---
+image_classification_resnet18:
+  task_type: classification
+  data_type: image
+
+  input_spec:
+    shape: [3, 224, 224]
+    dtype: float32
+    channels_first: true
+
+  model_spec:
+    family: cnn
+    architecture: resnet
+    backbone: resnet18
+    pretrained: true
+    in_channels: 3
+    feature_dim: 512
+
+  head_spec:
+    type: linear_cls
+    num_classes: 10
+    pooling: avg
+    dropout: 0.0
+
+  forward_spec:
+    input_tensor_name: images
+    output_tensor_name: logits
+    output_shape: [batch, 10]
+
+  compatibility:
+    expected_target_type: categorical
+    expected_loss: cross_entropy
+    target_dtype: int64
+    output_activation: none
+
+  constraints:
+    latency_tier: fast
+    model_size_mb: 45
+
+  artifacts:
+    template_name: image_classification/resnet
+    smoke_test_required: true
+
+  metadata:
+    route: image_classification
+    priority: P0
+    description: "ResNet18 for low-latency or small-model scenarios"
+
+# --- Example 3: ResNet50 (accuracy-first) ---
+image_classification_resnet50:
+  task_type: classification
+  data_type: image
+
+  input_spec:
+    shape: [3, 224, 224]
+    dtype: float32
+    channels_first: true
+
+  model_spec:
+    family: cnn
+    architecture: resnet
+    backbone: resnet50
+    pretrained: true
+    in_channels: 3
+    feature_dim: 2048
+
+  head_spec:
+    type: linear_cls
+    num_classes: 100
+    pooling: avg
+    dropout: 0.0
+
+  forward_spec:
+    input_tensor_name: images
+    output_tensor_name: logits
+    output_shape: [batch, 100]
+
+  compatibility:
+    expected_target_type: categorical
+    expected_loss: cross_entropy
+    target_dtype: int64
+    output_activation: none
+
+  constraints:
+    latency_tier: accurate
+    model_size_mb: 98
+
+  artifacts:
+    template_name: image_classification/resnet
+    smoke_test_required: true
+
+  metadata:
+    route: image_classification
+    priority: P0
+    description: "ResNet50 for accuracy-priority scenarios"
+
+# --- Example 4: EfficientNet-B0 (mobile / extreme low latency) ---
+image_classification_efficientnet_b0:
+  task_type: classification
+  data_type: image
+
+  input_spec:
+    shape: [3, 224, 224]
+    dtype: float32
+    channels_first: true
+
+  model_spec:
+    family: cnn
+    architecture: efficientnet
+    backbone: efficientnet_b0
+    pretrained: true
+    in_channels: 3
+    feature_dim: 1280
+
+  head_spec:
+    type: linear_cls
+    num_classes: 5
+    pooling: avg
+    dropout: 0.2
+
+  forward_spec:
+    input_tensor_name: images
+    output_tensor_name: logits
+    output_shape: [batch, 5]
+
+  compatibility:
+    expected_target_type: categorical
+    expected_loss: cross_entropy
+    target_dtype: int64
+    output_activation: none
+
+  constraints:
+    latency_tier: fast
+    model_size_mb: 21
+
+  artifacts:
+    template_name: image_classification/efficientnet
+    smoke_test_required: true
+
+  metadata:
+    route: image_classification
+    priority: P0
+    description: "EfficientNet-B0 for mobile or extreme low-latency scenarios"

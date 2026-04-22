@@ -1,0 +1,840 @@
+# =============================================================================
+# Torch Skill Suite — Route Map (任务路由表)
+# =============================================================================
+#
+# 定位：
+#   位于 data_contract（事实层）和 model_contract（实现层）之间的路由决策层。
+#   每一行回答：给定 (data_type, task_type) 组合，下游应该走哪条模型开发路径。
+#
+# 职责：
+#   1. 定义每条 route 的匹配条件（从 data_contract 消费什么字段）
+#   2. 推荐模型家族 / 候选 backbone / head 类型 / loss 语义
+#   3. 标注各下游 skill 的支持状态（supported / planned / unsupported）
+#   4. 作为 torch-model resolver 的第一级决策输入
+#   5. 作为整个 suite 的开发优先级依据和支持矩阵
+#
+# 优先级定义：
+#   P0 — 当前 MVP，立即实现，优先打通端到端闭环
+#   P1 — 下一批次，torch-model 第二阶段扩展
+#   P2 — 中期扩展，torch-model 第三阶段
+#   P3 — 远期规划，contract 已支持但 model 暂不实现
+#
+# 支持状态：
+#   supported     — 已实现，可运行
+#   partial       — 部分实现，存在限制
+#   planned       — 已规划，尚未实现
+#   unsupported   — 暂不支持
+#   not_applicable — 该 skill 不适用于此 route
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# P0 — MVP：优先打通端到端闭环
+# -----------------------------------------------------------------------------
+routes:
+  - route_id: image_classification
+    priority: P0
+    description: "图像分类 — 第一个端到端 MVP 路线"
+
+    # ---- 匹配条件：从 data_contract 消费的字段 ----
+    match:
+      data_type: image
+      task_type: classification
+      input_constraints:
+        shape_rank: 3                   # [C, H, W]
+        channels_first: true            # PyTorch 默认
+      output_constraints:
+        type: categorical
+        num_classes_min: 2
+
+    # ---- 标准化后的任务描述 ----
+    normalized_task:
+      family: image_classification
+      input_semantics: "RGB/BGR image tensor"
+      target_semantics: "integer class label"
+      output_semantics: "logits over num_classes"
+
+    # ---- 模型路径 ----
+    model:
+      family: cnn
+      backbone_candidates:
+        - resnet18                        # 轻量
+        - resnet34                        # 均衡（默认）
+        - resnet50                        # 精度优先
+        - efficientnet_b0                 # 移动端/低时延
+      default_backbone: resnet34
+      head:
+        type: linear_cls
+        pooling: global_average
+        dropout: 0.0
+      pretrained_default: true
+      selection_rules:
+        - condition: "constraints.latency_ms <= 50 or constraints.model_size_mb <= 100"
+          prefer: [efficientnet_b0, resnet18]
+        - condition: "constraints.model_size_mb > 200"
+          prefer: [resnet50]
+        - condition: "default"
+          prefer: [resnet34]
+
+    # ---- 训练兼容性 ----
+    training:
+      expected_loss: cross_entropy
+      target_dtype: int64
+      output_activation: none             # logits，loss 内部 softmax
+
+    # ---- 下游 skill 支持状态 ----
+    support:
+      torch_data: supported
+      torch_model: supported              # P0 已实现
+      torch_train: supported              # P0 已实现（合成数据 smoke test）
+      torch_eval_tune: supported            # P0 已实现（evaluate + tune smoke test）
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    # ---- 成熟度 ----
+    maturity:
+      contract: supported                 # data_contract 可表达
+      route_defined: true                 # 本条 route 已定义
+      model_resolver: supported           # resolve_model.py
+      template: supported                 # 模型骨架模板
+      smoke_test: supported               # dummy forward 验证
+
+    next_action: "P0 已完成。下一步：P1 text_classification 或对接 torch-train"
+    notes: "第一个端到端 MVP 路线，优先保证稳定"
+
+# -----------------------------------------------------------------------------
+# P1 — 下一批次：高价值扩展
+# -----------------------------------------------------------------------------
+
+  - route_id: text_classification
+    priority: P1
+    description: "文本分类"
+
+    match:
+      data_type: text
+      task_type: classification
+      input_constraints:
+        sequence_length_min: 1
+      output_constraints:
+        type: categorical
+        num_classes_min: 2
+
+    normalized_task:
+      family: text_classification
+      input_semantics: "tokenized text (input_ids + attention_mask)"
+      target_semantics: "integer class label"
+      output_semantics: "logits over num_classes"
+
+    model:
+      family: transformer_encoder
+      backbone_candidates:
+        - bert-base-uncased
+        - roberta-base
+        - distilbert-base-uncased       # 轻量
+        - albert-base-v2                # 更轻量
+      default_backbone: bert-base-uncased
+      head:
+        type: pooled_linear_cls
+        pooling: cls_token
+        dropout: 0.1
+      pretrained_default: true
+      selection_rules:
+        - condition: "constraints.latency_ms <= 30 or constraints.model_size_mb <= 100"
+          prefer: [distilbert-base-uncased, albert-base-v2]
+        - condition: "default"
+          prefer: [bert-base-uncased]
+
+    training:
+      expected_loss: cross_entropy
+      target_dtype: int64
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: supported
+      torch_train: supported
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: supported
+      template: supported
+      smoke_test: supported
+
+    next_action: "P1 已完成。可扩展 RoBERTa/ALBERT 或继续其他路由"
+    notes: "使用纯 PyTorch TransformerEncoder 实现，无需 HuggingFace 网络依赖"
+
+  - route_id: image_segmentation
+    priority: P1
+    description: "图像语义分割"
+
+    match:
+      data_type: image
+      task_type: segmentation
+      input_constraints:
+        shape_rank: 3
+        channels_first: true
+      output_constraints:
+        type: mask
+        num_classes_min: 2
+        mask_shape_required: true
+
+    normalized_task:
+      family: image_segmentation
+      input_semantics: "RGB/BGR image tensor"
+      target_semantics: "pixel-wise class label mask"
+      output_semantics: "pixel-wise logits [B, num_classes, H, W]"
+
+    model:
+      family: cnn_encoder_decoder
+      backbone_candidates:
+        - unet                          # 经典通用
+        - deeplabv3_resnet50            # 大感受野
+        - deeplabv3_mobilenet_v3_large  # 轻量
+        - segformer_b0                  # Transformer 路线
+      default_backbone: deeplabv3_resnet50
+      head:
+        type: segmentation_head
+        output_channels: "num_classes"
+        upsample_mode: bilinear
+      pretrained_default: true
+      selection_rules:
+        - condition: "constraints.model_size_mb <= 50"
+          prefer: [deeplabv3_mobilenet_v3_large]
+        - condition: "default"
+          prefer: [deeplabv3_resnet50]
+
+    training:
+      expected_loss: cross_entropy      # 可扩展 dice + ce 组合
+      target_dtype: int64
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: supported
+      torch_train: supported
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: supported
+      template: supported
+      smoke_test: supported
+
+    next_action: "P1 已完成。可扩展 UNet 或继续其他路由"
+    notes: "mask shape 需与 input image spatial size 对齐，resize 策略是关键设计点"
+
+  - route_id: tabular_classification
+    priority: P1
+    description: "表格数据分类"
+
+    match:
+      data_type: tabular
+      task_type: classification
+      input_constraints:
+        num_features_min: 1
+      output_constraints:
+        type: categorical
+        num_classes_min: 2
+
+    normalized_task:
+      family: tabular_classification
+      input_semantics: "feature vector [B, num_features]"
+      target_semantics: "integer class label"
+      output_semantics: "logits over num_classes"
+
+    model:
+      family: mlp_or_attention
+      backbone_candidates:
+        - mlp                           # 3-5 层全连接，带 BN + Dropout
+        - tabnet                        # 可解释注意力
+        - ft_transformer                # Transformer（大表优先）
+      default_backbone: mlp
+      head:
+        type: linear_cls
+        dropout: 0.2
+      pretrained_default: false         # 表格模型通常从头训练
+      selection_rules:
+        - condition: "num_features <= 50"
+          prefer: [mlp]
+        - condition: "num_features > 50"
+          prefer: [tabnet, ft_transformer]
+
+    training:
+      expected_loss: cross_entropy
+      target_dtype: int64
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: supported
+      torch_train: supported
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: supported
+      template: supported
+      smoke_test: supported
+
+    next_action: "P1 已完成。可扩展 tabnet/ft_transformer 或继续其他 P1 路由"
+    notes: "数据预处理（impute/scale/encode）在 torch-data 侧完成，model 侧接收已处理特征"
+
+  - route_id: tabular_regression
+    priority: P1
+    description: "表格数据回归"
+
+    match:
+      data_type: tabular
+      task_type: regression
+      input_constraints:
+        num_features_min: 1
+      output_constraints:
+        type: continuous
+        output_dim_min: 1
+
+    normalized_task:
+      family: tabular_regression
+      input_semantics: "feature vector [B, num_features]"
+      target_semantics: "continuous scalar or vector"
+      output_semantics: "raw prediction [B, output_dim]"
+
+    model:
+      family: mlp_or_attention
+      backbone_candidates:
+        - mlp
+        - tabnet
+        - ft_transformer
+      default_backbone: mlp
+      head:
+        type: linear_regression
+        output_dim: "from output_spec.output_dim"
+      pretrained_default: false
+      selection_rules:
+        - condition: "num_features <= 50"
+          prefer: [mlp]
+        - condition: "num_features > 50"
+          prefer: [tabnet, ft_transformer]
+
+    training:
+      expected_loss: mse                 # 可扩展 huber / mae
+      target_dtype: float32
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: supported
+      torch_train: supported
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: supported
+      template: supported
+      smoke_test: supported
+
+    next_action: "P1 已完成。可扩展 tabnet/ft_transformer 或继续其他 P1 路由"
+    notes: "head 输出维度由 output_spec.output_dim 决定"
+
+# -----------------------------------------------------------------------------
+# P2 — 中期扩展
+# -----------------------------------------------------------------------------
+
+  - route_id: image_detection
+    priority: P2
+    description: "图像目标检测"
+
+    match:
+      data_type: image
+      task_type: detection
+      input_constraints:
+        shape_rank: 3
+        channels_first: true
+      output_constraints:
+        type: bounding_box
+        bbox_format_required: true
+
+    normalized_task:
+      family: image_detection
+      input_semantics: "RGB/BGR image tensor"
+      target_semantics: "bbox coordinates + class labels"
+      output_semantics: "list of {boxes, labels, scores} per image"
+
+    model:
+      family: cnn_detector
+      backbone_candidates:
+        - fasterrcnn_resnet50_fpn        # 两阶段，精度优先
+        - ssd_mobilenet_v3_large         # 单阶段，速度优先
+        - yolov5s                        # 工业标准（需额外依赖）
+        - retinanet_resnet50_fpn         # Focal Loss，类别不均衡
+      default_backbone: fasterrcnn_resnet50_fpn
+      head:
+        type: detection_head
+        components: [bbox_regressor, class_classifier]
+      pretrained_default: true
+      selection_rules:
+        - condition: "constraints.latency_ms <= 30"
+          prefer: [ssd_mobilenet_v3_large, yolov5s]
+        - condition: "default"
+          prefer: [fasterrcnn_resnet50_fpn]
+
+    training:
+      expected_loss: "combination of bbox regression + classification"
+      target_dtype: "list of dict {boxes: float32, labels: int64}"
+      output_activation: "sigmoid/softmax per detector design"
+      note: "loss 函数与模型强耦合，resolver 应明确 loss 实现"
+
+    support:
+      torch_data: supported
+      torch_model: planned
+      torch_train: planned
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: unsupported
+      template: unsupported
+      smoke_test: unsupported
+
+    next_action: "P2 第一条，需要先完成 image_classification 以积累 CNN backbone 经验"
+    notes: "检测模型复杂度显著高于分类/分割，需要更完善的 contract 字段支持"
+
+  - route_id: time_series_classification
+    priority: P2
+    description: "时间序列分类"
+
+    match:
+      data_type: time_series
+      task_type: classification
+      input_constraints:
+        shape_rank: 2                   # [time_steps, features] or [features, time_steps]
+      output_constraints:
+        type: categorical
+        num_classes_min: 2
+
+    normalized_task:
+      family: time_series_classification
+      input_semantics: "multivariate time series"
+      target_semantics: "integer class label (whole-sequence)"
+      output_semantics: "logits over num_classes"
+
+    model:
+      family: sequence_model
+      backbone_candidates:
+        - lstm
+        - gru
+        - tcn                           # Temporal Convolutional Network
+        - patch_tst                     # Transformer（长序列优先）
+      default_backbone: lstm
+      head:
+        type: sequence_pooled_cls
+        pooling: last_timestep           # 或 mean / max / attention
+        dropout: 0.1
+      pretrained_default: false
+      selection_rules:
+        - condition: "time_steps <= 100"
+          prefer: [lstm, gru]
+        - condition: "time_steps > 100"
+          prefer: [tcn, patch_tst]
+
+    training:
+      expected_loss: cross_entropy
+      target_dtype: int64
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: planned
+      torch_train: planned
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: unsupported
+      template: unsupported
+      smoke_test: unsupported
+
+    next_action: "P2 第二条"
+    notes: "需注意 time_steps 维度位置，与 data_contract.input_spec.shape 语义对齐"
+
+  - route_id: time_series_regression
+    priority: P2
+    description: "时间序列回归/预测"
+
+    match:
+      data_type: time_series
+      task_type: regression
+      input_constraints:
+        shape_rank: 2
+      output_constraints:
+        type: continuous
+        output_dim_min: 1
+
+    normalized_task:
+      family: time_series_regression
+      input_semantics: "multivariate time series"
+      target_semantics: "continuous scalar or sequence"
+      output_semantics: "raw prediction [B, output_dim] or [B, horizon, output_dim]"
+
+    model:
+      family: sequence_model
+      backbone_candidates:
+        - lstm
+        - gru
+        - tcn
+        - patch_tst
+      default_backbone: lstm
+      head:
+        type: sequence_regression
+        output_dim: "from output_spec.output_dim"
+        dropout: 0.1
+      pretrained_default: false
+      selection_rules:
+        - condition: "time_steps <= 100"
+          prefer: [lstm, gru]
+        - condition: "time_steps > 100"
+          prefer: [tcn, patch_tst]
+
+    training:
+      expected_loss: mse
+      target_dtype: float32
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: planned
+      torch_train: planned
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: unsupported
+      template: unsupported
+      smoke_test: unsupported
+
+    next_action: "与 time_series_classification 共享基础设施"
+    notes: "预测 horizon 需从 data_contract 推断或由 project_spec 指定"
+
+  - route_id: audio_classification
+    priority: P2
+    description: "音频分类"
+
+    match:
+      data_type: audio
+      task_type: classification
+      input_constraints:
+        sample_rate_required: true
+      output_constraints:
+        type: categorical
+        num_classes_min: 2
+
+    normalized_task:
+      family: audio_classification
+      input_semantics: "raw waveform or mel-spectrogram"
+      target_semantics: "integer class label"
+      output_semantics: "logits over num_classes"
+
+    model:
+      family: cnn_audio
+      backbone_candidates:
+        - cnn10                         # 轻量 CNN（类似 VGG-ish）
+        - resnet18_1d                   # 1D ResNet 变体
+        - wav2vec2_base                 # 预训练 Transformer（大数据优先）
+      default_backbone: cnn10
+      head:
+        type: pooled_linear_cls
+        pooling: global_average
+        dropout: 0.2
+      pretrained_default: false         # wav2vec2 例外
+      selection_rules:
+        - condition: "pretrained available and dataset is small"
+          prefer: [wav2vec2_base]
+        - condition: "default"
+          prefer: [cnn10]
+
+    training:
+      expected_loss: cross_entropy
+      target_dtype: int64
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: planned
+      torch_train: planned
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: unsupported
+      template: unsupported
+      smoke_test: unsupported
+
+    next_action: "P2 第四条"
+    notes: "torch-data 当前只做结构检查，不解码音频内容；model 侧需处理 spectrogram 转换"
+
+# -----------------------------------------------------------------------------
+# P3 — 远期规划
+# -----------------------------------------------------------------------------
+
+  - route_id: video_classification
+    priority: P3
+    description: "视频分类/动作识别"
+
+    match:
+      data_type: video
+      task_type: classification
+      input_constraints:
+        shape_rank: 4                   # [C, T, H, W]
+      output_constraints:
+        type: categorical
+        num_classes_min: 2
+
+    normalized_task:
+      family: video_classification
+      input_semantics: "video clip tensor [B, C, T, H, W]"
+      target_semantics: "integer class label"
+      output_semantics: "logits over num_classes"
+
+    model:
+      family: cnn_3d_or_transformer
+      backbone_candidates:
+        - r3d_18                        # 3D ResNet
+        - mc3_18                        # Mixed Convolution
+        - timesformer                   # Space-Time Transformer
+        - slowfast_r50                  # 双路径
+      default_backbone: r3d_18
+      head:
+        type: pooled_linear_cls
+        pooling: spatiotemporal_avg
+        dropout: 0.3
+      pretrained_default: true
+      selection_rules: []
+
+    training:
+      expected_loss: cross_entropy
+      target_dtype: int64
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: planned
+      torch_train: planned
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: unsupported
+      template: unsupported
+      smoke_test: unsupported
+
+    next_action: "P3 第一条，等待 P1/P2 稳定后再启动"
+    notes: "计算量远大于图像模型，需要更细的 resource constraints"
+
+  - route_id: multimodal_classification
+    priority: P3
+    description: "多模态分类（image+text / audio+text 等）"
+
+    match:
+      data_type: multimodal
+      task_type: classification
+      output_constraints:
+        type: categorical
+        num_classes_min: 2
+
+    normalized_task:
+      family: multimodal_classification
+      input_semantics: "paired multimodal inputs"
+      target_semantics: "integer class label"
+      output_semantics: "logits over num_classes"
+
+    model:
+      family: multimodal_fusion
+      backbone_candidates:
+        - two_tower_fusion              # 各模态独立 encoder + 融合层
+        - clip_style                    # 对比预训练 backbone
+      default_backbone: two_tower_fusion
+      head:
+        type: fusion_cls
+        fusion: concat                  # 或 attention / gated
+        dropout: 0.2
+      pretrained_default: true
+      selection_rules: []
+
+    training:
+      expected_loss: cross_entropy
+      target_dtype: int64
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: planned
+      torch_train: planned
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: supported
+      route_defined: true
+      model_resolver: unsupported
+      template: unsupported
+      smoke_test: unsupported
+
+    next_action: "P3 第二条，依赖 image + text 单模态路线先稳定"
+    notes: "torch-data 当前只支持 manifest-driven 多模态，model 侧需按 manifest 字段拆分 encoder"
+
+  - route_id: text_generation
+    priority: P3
+    description: "文本生成/翻译"
+
+    match:
+      data_type: text
+      task_type: [generation, translation]
+      input_constraints:
+        sequence_length_min: 1
+      output_constraints:
+        type: sequence
+
+    normalized_task:
+      family: text_seq2seq
+      input_semantics: "tokenized source text"
+      target_semantics: "tokenized target text (shifted)"
+      output_semantics: "token logits [B, seq_len, vocab_size]"
+
+    model:
+      family: transformer_seq2seq
+      backbone_candidates:
+        - t5_small
+        - bart_base
+        - gpt2                          # 仅 decoder（generation）
+      default_backbone: t5_small
+      head:
+        type: lm_head
+        vocab_size: "from input_spec.vocab_size"
+      pretrained_default: true
+      selection_rules: []
+
+    training:
+      expected_loss: cross_entropy      # per-token，ignore_index 用于 padding
+      target_dtype: int64
+      output_activation: none
+
+    support:
+      torch_data: supported
+      torch_model: planned
+      torch_train: planned
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: partial                 # data_contract 对 seq2seq 的 output_spec 支持仍较弱
+      route_defined: true
+      model_resolver: unsupported
+      template: unsupported
+      smoke_test: unsupported
+
+    next_action: "P3 第三条，需先完善 data_contract 对 sequence output 的表达"
+    notes: "generation 与 classification 差异巨大，training loop 也需要适配 teacher forcing"
+
+  - route_id: time_series_forecasting
+    priority: P3
+    description: "时间序列预测（多步）"
+
+    match:
+      data_type: time_series
+      task_type: regression
+      output_constraints:
+        type: continuous
+        output_dim_min: 2               # 多步预测
+
+    normalized_task:
+      family: time_series_forecasting
+      input_semantics: "historical window"
+      target_semantics: "future horizon"
+      output_semantics: "predicted horizon [B, horizon, features]"
+
+    model:
+      family: sequence_model
+      backbone_candidates:
+        - lstm
+        - tcn
+        - patch_tst
+        - nbeats
+      default_backbone: patch_tst
+      head:
+        type: forecasting_head
+        horizon: "from output_spec"
+        output_dim: "from output_spec.output_dim"
+      pretrained_default: false
+      selection_rules: []
+
+    training:
+      expected_loss: mse
+      target_dtype: float32
+      output_activation: none
+
+    support:
+      torch_data: partial               # 需增强 contract 对 horizon/window 的表达
+      torch_model: planned
+      torch_train: planned
+      torch_eval_tune: planned
+      torch_infer_deploy: planned
+      torch_engineering: planned
+
+    maturity:
+      contract: partial
+      route_defined: true
+      model_resolver: unsupported
+      template: unsupported
+      smoke_test: unsupported
+
+    next_action: "P3 第四条"
+    notes: "需要 data_contract 增加 forecast_horizon / lookback_window 等字段"
+
+# =============================================================================
+# 汇总：优先级矩阵
+# =============================================================================
+#
+# | Priority | Route ID                    | data_type   | task_type      | torch-model | 说明                     |
+# |---------:|-----------------------------|-------------|----------------|-------------|--------------------------|
+# | P0       | image_classification        | image       | classification | planned     | 第一个 MVP，立即实现      |
+# | P1       | text_classification         | text        | classification | planned     | 第一批扩展               |
+# | P1       | image_segmentation          | image       | segmentation   | planned     | 第一批扩展               |
+# | P1       | tabular_classification      | tabular     | classification | planned     | 第一批扩展               |
+# | P1       | tabular_regression          | tabular     | regression     | planned     | 第一批扩展               |
+# | P2       | image_detection             | image       | detection      | planned     | 中期扩展                 |
+# | P2       | time_series_classification  | time_series | classification | planned     | 中期扩展                 |
+# | P2       | time_series_regression      | time_series | regression     | planned     | 中期扩展                 |
+# | P2       | audio_classification        | audio       | classification | planned     | 中期扩展                 |
+# | P3       | video_classification        | video       | classification | planned     | 远期规划                 |
+# | P3       | multimodal_classification   | multimodal  | classification | planned     | 远期规划                 |
+# | P3       | text_generation             | text        | generation     | planned     | 远期规划                 |
+# | P3       | time_series_forecasting     | time_series | regression     | planned     | 远期规划                 |
+# =============================================================================

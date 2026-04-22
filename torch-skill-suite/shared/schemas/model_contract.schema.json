@@ -2,5 +2,233 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "model_contract",
   "type": "object",
-  "description": "Placeholder schema for model contract."
+  "description": "Model contract schema for PyTorch model construction. Defines architecture, head, forward interface, and training compatibility. Consumed by torch-train and torch-infer-deploy.",
+  "properties": {
+    "task_type": {
+      "type": "string",
+      "enum": ["classification", "detection", "segmentation", "regression", "generation", "translation"],
+      "description": "Machine learning task type, aligned with data_contract.task_type."
+    },
+    "data_type": {
+      "type": "string",
+      "enum": ["image", "text", "time_series", "tabular", "audio", "video", "multimodal"],
+      "description": "Primary modality, aligned with data_contract.data_type."
+    },
+    "input_spec": {
+      "type": "object",
+      "description": "Input tensor specification consumed from data_contract.",
+      "properties": {
+        "shape": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "minItems": 1,
+          "description": "Shape of a single input sample (excludes batch dimension)."
+        },
+        "dtype": {
+          "type": "string",
+          "description": "Expected input dtype (e.g. float32, int64, uint8)."
+        },
+        "channels_first": {
+          "type": "boolean",
+          "description": "For image data, whether channels come first (C,H,W)."
+        }
+      },
+      "required": ["shape", "dtype"],
+      "additionalProperties": true
+    },
+    "model_spec": {
+      "type": "object",
+      "description": "Core model architecture definition.",
+      "properties": {
+        "family": {
+          "type": "string",
+          "description": "Model family (e.g. cnn, transformer_encoder, mlp, sequence_model)."
+        },
+        "architecture": {
+          "type": "string",
+          "description": "Specific architecture name (e.g. resnet, efficientnet, bert)."
+        },
+        "backbone": {
+          "type": "string",
+          "description": "Exact backbone variant (e.g. resnet34, bert-base-uncased)."
+        },
+        "pretrained": {
+          "type": "boolean",
+          "description": "Whether to load pretrained weights."
+        },
+        "in_channels": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of input channels."
+        },
+        "feature_dim": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Dimension of features produced by backbone before head."
+        }
+      },
+      "required": ["family", "architecture", "backbone", "pretrained", "in_channels"],
+      "additionalProperties": true
+    },
+    "head_spec": {
+      "type": "object",
+      "description": "Prediction head specification.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Head type (e.g. linear_cls, pooled_linear_cls, segmentation_head, detection_head)."
+        },
+        "num_classes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "For classification, number of output classes."
+        },
+        "pooling": {
+          "type": "string",
+          "description": "Pooling strategy before head (e.g. avg, cls_token, last_timestep)."
+        },
+        "dropout": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Dropout rate applied before the final linear layer."
+        },
+        "output_dim": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "For regression, output dimension."
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": true
+    },
+    "forward_spec": {
+      "type": "object",
+      "description": "Forward pass interface contract.",
+      "properties": {
+        "input_tensor_name": {
+          "type": "string",
+          "description": "Semantic name for the input tensor."
+        },
+        "output_tensor_name": {
+          "type": "string",
+          "description": "Semantic name for the output tensor."
+        },
+        "output_shape": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "integer", "minimum": 1 },
+              { "type": "string", "enum": ["batch"] }
+            ]
+          },
+          "description": "Expected output shape with 'batch' as placeholder for batch size."
+        }
+      },
+      "required": ["output_shape"],
+      "additionalProperties": true
+    },
+    "compatibility": {
+      "type": "object",
+      "description": "Training compatibility hints for torch-train.",
+      "properties": {
+        "expected_target_type": {
+          "type": "string",
+          "enum": ["categorical", "continuous", "bounding_box", "mask", "sequence"],
+          "description": "Target type the model expects."
+        },
+        "expected_loss": {
+          "type": "string",
+          "description": "Recommended loss function (e.g. cross_entropy, mse)."
+        },
+        "target_dtype": {
+          "type": "string",
+          "description": "Expected dtype for target tensors."
+        },
+        "output_activation": {
+          "type": "string",
+          "description": "Activation on model output (e.g. none, softmax, sigmoid)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "constraints": {
+      "type": "object",
+      "description": "Resource constraints that influenced model selection.",
+      "properties": {
+        "latency_tier": {
+          "type": "string",
+          "enum": ["fast", "balanced", "accurate"],
+          "description": "Latency/accuracy tradeoff tier."
+        },
+        "model_size_mb": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Approximate model size in MB."
+        }
+      },
+      "additionalProperties": true
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "References to generated or template artifacts.",
+      "properties": {
+        "template_name": {
+          "type": "string",
+          "description": "Template path used to generate model code."
+        },
+        "smoke_test_required": {
+          "type": "boolean",
+          "description": "Whether dummy forward validation is expected."
+        }
+      },
+      "additionalProperties": true
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata.",
+      "additionalProperties": true
+    }
+  },
+  "required": ["task_type", "data_type", "input_spec", "model_spec", "head_spec", "forward_spec"],
+  "allOf": [
+    {
+      "if": {
+        "properties": { "task_type": { "const": "classification" } }
+      },
+      "then": {
+        "properties": {
+          "head_spec": { "required": ["num_classes"] },
+          "compatibility": {
+            "properties": { "expected_target_type": { "const": "categorical" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "task_type": { "const": "regression" } }
+      },
+      "then": {
+        "properties": {
+          "head_spec": { "required": ["output_dim"] },
+          "compatibility": {
+            "properties": { "expected_target_type": { "const": "continuous" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "data_type": { "const": "image" } }
+      },
+      "then": {
+        "properties": {
+          "input_spec": {
+            "properties": { "shape": { "minItems": 3, "maxItems": 3 } }
+          }
+        }
+      }
+    }
+  ]
 }
