@@ -1,0 +1,41 @@
+artifacts:
+  smoke_test_required: true
+  template_name: image_segmentation/deeplabv3
+compatibility:
+  expected_loss: cross_entropy
+  expected_target_type: mask
+  output_activation: none
+  target_dtype: int64
+constraints:
+  latency_tier: balanced
+  model_size_mb: 50
+data_type: image
+forward_spec:
+  input_tensor_name: images
+  output_shape:
+  - batch
+  - 4
+  - 224
+  - 224
+  output_tensor_name: masks
+head_spec:
+  num_classes: 4
+  type: segmentation_head
+input_spec:
+  channels_first: true
+  dtype: float32
+  shape:
+  - 3
+  - 224
+  - 224
+metadata:
+  priority: P1
+  resolver_version: 0.3.0
+  route: image_segmentation
+model_spec:
+  architecture: deeplabv3
+  backbone: deeplabv3_resnet50
+  family: cnn_encoder_decoder
+  in_channels: 3
+  pretrained: false
+task_type: segmentation

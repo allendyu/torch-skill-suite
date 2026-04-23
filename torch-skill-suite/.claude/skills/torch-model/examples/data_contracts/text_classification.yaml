@@ -1,0 +1,36 @@
+data_format_option: auto_inferred
+data_type: text
+inferred_format_spec:
+  details:
+    columns:
+    - text
+    - label
+    delimiter: ','
+    encoding: utf-8
+  format_type: CSV
+input_spec:
+  dtype: int64
+  sequence_length: 128
+  max_seq_length: 128
+  vocab_size: 30522
+metadata:
+  source: Sentiment analysis dataset
+output_spec:
+  label_map:
+    0: negative
+    1: somewhat_negative
+    2: neutral
+    3: somewhat_positive
+    4: positive
+  num_classes: 5
+  type: categorical
+preprocessing:
+- name: tokenize
+  params:
+    max_length: 128
+    tokenizer: bert-tiny
+splits:
+  test: data/test.csv
+  train: data/train.csv
+  val: data/val.csv
+task_type: classification

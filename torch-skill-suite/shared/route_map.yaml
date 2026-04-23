@@ -87,7 +87,7 @@ routes:
       torch_model: supported              # P0 已实现
       torch_train: supported              # P0 已实现（合成数据 smoke test）
       torch_eval_tune: supported            # P0 已实现（evaluate + tune smoke test）
-      torch_infer_deploy: planned
+      torch_infer_deploy: supported          # P0 已实现（export + serve + smoke test）
       torch_engineering: planned
 
     # ---- 成熟度 ----
@@ -152,8 +152,8 @@ routes:
       torch_data: supported
       torch_model: supported
       torch_train: supported
-      torch_eval_tune: planned
-      torch_infer_deploy: planned
+      torch_eval_tune: supported
+      torch_infer_deploy: supported
       torch_engineering: planned
 
     maturity:
@@ -215,8 +215,8 @@ routes:
       torch_data: supported
       torch_model: supported
       torch_train: supported
-      torch_eval_tune: planned
-      torch_infer_deploy: planned
+      torch_eval_tune: supported
+      torch_infer_deploy: supported
       torch_engineering: planned
 
     maturity:
@@ -274,8 +274,8 @@ routes:
       torch_data: supported
       torch_model: supported
       torch_train: supported
-      torch_eval_tune: planned
-      torch_infer_deploy: planned
+      torch_eval_tune: supported
+      torch_infer_deploy: supported
       torch_engineering: planned
 
     maturity:
@@ -333,8 +333,8 @@ routes:
       torch_data: supported
       torch_model: supported
       torch_train: supported
-      torch_eval_tune: planned
-      torch_infer_deploy: planned
+      torch_eval_tune: supported
+      torch_infer_deploy: supported
       torch_engineering: planned
 
     maturity:

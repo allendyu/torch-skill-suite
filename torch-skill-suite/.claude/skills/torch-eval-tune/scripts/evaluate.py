@@ -36,6 +36,9 @@ for _p in [str(TRAIN_SCRIPTS_DIR.resolve()), str(MODEL_SCRIPTS_DIR.resolve())]:
 from train import (
     build_model_from_contract,
     create_synthetic_dataloader,
+    create_synthetic_text_dataloader,
+    create_synthetic_segmentation_dataloader,
+    create_synthetic_regression_dataloader,
     create_imagefolder_dataloader,
     _load_yaml,
     _add_template_path,
@@ -91,6 +94,30 @@ def compute_metrics(all_labels, all_preds, num_classes):
         "per_class_recall": per_class_recall,
         "per_class_f1": per_class_f1,
         "confusion_matrix": cm.tolist(),
+    }
+
+
+def compute_regression_metrics(all_labels, all_preds):
+    """Compute regression metrics from accumulated predictions.
+
+    Args:
+        all_labels: (N,) float array of true values.
+        all_preds: (N,) float array of predicted values.
+
+    Returns:
+        Dict with mse, mae, rmse, r2.
+    """
+    mse = float(np.mean((all_labels - all_preds) ** 2))
+    mae = float(np.mean(np.abs(all_labels - all_preds)))
+    rmse = float(np.sqrt(mse))
+    ss_res = np.sum((all_labels - all_preds) ** 2)
+    ss_tot = np.sum((all_labels - np.mean(all_labels)) ** 2)
+    r2 = float(1 - ss_res / ss_tot) if ss_tot > 0 else 0.0
+    return {
+        "mse": round(mse, 4),
+        "mae": round(mae, 4),
+        "rmse": round(rmse, 4),
+        "r2": round(r2, 4),
     }
 
 
@@ -170,10 +197,12 @@ def evaluate(model_contract, checkpoint_path, data_contract=None,
 
     # Build dataloader
     preprocessing = data_contract.get("preprocessing", []) if data_contract else []
+    output_dim = model_contract.get("head_spec", {}).get("output_dim", 1)
     if synthetic or (data_dir is None and not data_dir):
         print(f"Using synthetic validation data")
-        val_loader = create_synthetic_dataloader(
-            input_spec, num_classes, num_samples=200, batch_size=batch_size
+        val_loader = _create_eval_dataloader(
+            model_contract, input_spec, num_classes, output_dim,
+            num_samples=200, batch_size=batch_size
         )
     else:
         print(f"Using ImageFolder data from: {data_dir}")
@@ -183,7 +212,8 @@ def evaluate(model_contract, checkpoint_path, data_contract=None,
         )
 
     # Run inference
-    criterion = nn.CrossEntropyLoss()
+    task_type = model_contract.get("task_type", "classification")
+    criterion = nn.MSELoss() if task_type == "regression" else nn.CrossEntropyLoss()
     all_labels = []
     all_preds = []
 
@@ -198,9 +228,13 @@ def evaluate(model_contract, checkpoint_path, data_contract=None,
             if isinstance(outputs, dict):
                 outputs = outputs.get("out", outputs)
 
-            _, predicted = outputs.max(1)
-            all_labels.append(labels.numpy())
-            all_preds.append(predicted.cpu().numpy())
+            if task_type == "regression":
+                all_labels.append(labels.numpy())
+                all_preds.append(outputs.cpu().numpy())
+            else:
+                _, predicted = outputs.max(1)
+                all_labels.append(labels.numpy())
+                all_preds.append(predicted.cpu().numpy())
 
     all_labels = np.concatenate(all_labels)
     all_preds = np.concatenate(all_preds)
@@ -209,7 +243,10 @@ def evaluate(model_contract, checkpoint_path, data_contract=None,
     val_loss = compute_loss(model, val_loader, criterion, device)
 
     # Compute metrics
-    metrics = compute_metrics(all_labels, all_preds, num_classes)
+    if task_type == "regression":
+        metrics = compute_regression_metrics(all_labels, all_preds)
+    else:
+        metrics = compute_metrics(all_labels, all_preds, num_classes)
 
     report = {
         "checkpoint": str(checkpoint_path),
@@ -225,6 +262,33 @@ def evaluate(model_contract, checkpoint_path, data_contract=None,
     }
 
     return report
+
+
+def _create_eval_dataloader(model_contract, input_spec, num_classes, output_dim=1,
+                             num_samples=200, batch_size=16):
+    """Create the appropriate synthetic DataLoader for evaluation.
+
+    Dispatches to route-specific dataloaders based on model architecture.
+    """
+    architecture = model_contract.get("model_spec", {}).get("architecture", "")
+    task_type = model_contract.get("task_type", "classification")
+
+    if architecture == "bert":
+        return create_synthetic_text_dataloader(
+            input_spec, num_classes, num_samples=num_samples, batch_size=batch_size
+        )
+    elif architecture in ("deeplabv3", "unet"):
+        return create_synthetic_segmentation_dataloader(
+            input_spec, num_classes, num_samples=num_samples, batch_size=batch_size
+        )
+    elif architecture == "mlp" and task_type == "regression":
+        return create_synthetic_regression_dataloader(
+            input_spec, output_dim=output_dim, num_samples=num_samples, batch_size=batch_size
+        )
+    else:
+        return create_synthetic_dataloader(
+            input_spec, num_classes, num_samples=num_samples, batch_size=batch_size
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -301,8 +365,12 @@ def main():
         print(f"\n# Evaluation report\n{yaml_output}")
 
     # Summary
-    print(f"\nAccuracy: {report['metrics']['accuracy']:.1f}%")
-    print(f"Macro F1: {report['metrics']['macro_f1']:.4f}")
+    if "accuracy" in report["metrics"]:
+        print(f"\nAccuracy: {report['metrics']['accuracy']:.1f}%")
+        print(f"Macro F1: {report['metrics']['macro_f1']:.4f}")
+    else:
+        print(f"\nMSE: {report['metrics']['mse']:.4f}")
+        print(f"R²:  {report['metrics']['r2']:.4f}")
     print(f"Loss:     {report['loss']:.4f}")
 
 

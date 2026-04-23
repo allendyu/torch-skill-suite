@@ -1,0 +1,32 @@
+data_format_option: user_provided
+data_type: tabular
+input_spec:
+  dtype: float32
+  num_features: 18
+  shape:
+  - 18
+metadata:
+  source: Housing price regression example
+output_spec:
+  output_dim: 1
+  type: continuous
+preprocessing:
+- name: impute
+  params:
+    strategy: median
+- name: encode_categorical
+  params:
+    strategy: one_hot
+- name: scale
+  params:
+    method: standard
+splits:
+  test: data/test.csv
+  train: data/train.csv
+  val: data/val.csv
+task_type: regression
+user_format_spec:
+  details:
+    header: true
+    target_column: sale_price
+  format_type: CSV

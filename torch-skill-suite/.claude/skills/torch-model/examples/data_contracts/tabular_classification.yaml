@@ -1,0 +1,32 @@
+data_format_option: user_provided
+data_type: tabular
+input_spec:
+  dtype: float32
+  num_features: 30
+  shape:
+  - 30
+metadata:
+  source: Medical dataset
+output_spec:
+  label_map:
+    0: benign
+    1: malignant
+  num_classes: 2
+  type: categorical
+preprocessing:
+- name: impute
+  params:
+    strategy: median
+- name: scale
+  params:
+    method: standard
+splits:
+  test: data/test.csv
+  train: data/train.csv
+  val: data/val.csv
+task_type: classification
+user_format_spec:
+  details:
+    header: true
+    target_column: target
+  format_type: CSV

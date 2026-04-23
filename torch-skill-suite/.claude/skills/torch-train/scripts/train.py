@@ -597,6 +597,34 @@ class Trainer:
         return checkpoint
 
 
+def _create_synthetic_dataloader_for_contract(model_contract, input_spec, num_classes, output_dim=1,
+                                               num_samples=200, batch_size=16):
+    """Create the appropriate synthetic DataLoader based on model architecture.
+
+    Dispatches to the correct dataloader for text, segmentation, regression, and
+    standard classification tasks.
+    """
+    architecture = model_contract.get("model_spec", {}).get("architecture", "")
+    task_type = model_contract.get("task_type", "classification")
+
+    if architecture == "bert":
+        return create_synthetic_text_dataloader(
+            input_spec, num_classes, num_samples=num_samples, batch_size=batch_size
+        )
+    elif architecture in ("deeplabv3", "unet"):
+        return create_synthetic_segmentation_dataloader(
+            input_spec, num_classes, num_samples=num_samples, batch_size=batch_size
+        )
+    elif architecture == "mlp" and task_type == "regression":
+        return create_synthetic_regression_dataloader(
+            input_spec, output_dim=output_dim, num_samples=num_samples, batch_size=batch_size
+        )
+    else:
+        return create_synthetic_dataloader(
+            input_spec, num_classes, num_samples=num_samples, batch_size=batch_size
+        )
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -643,14 +671,17 @@ def main():
     print(f"  Parameters: {trainable:,} trainable / {total:,} total")
 
     # DataLoader
+    output_dim = model_contract.get("head_spec", {}).get("output_dim", 1)
     preprocessing = data_contract.get("preprocessing", [])
     if args.synthetic or (args.data_dir is None and not args.data_dir):
         print(f"Using synthetic data ({200} samples)")
-        train_loader = create_synthetic_dataloader(
-            input_spec, num_classes, num_samples=200, batch_size=args.batch_size
+        train_loader = _create_synthetic_dataloader_for_contract(
+            model_contract, input_spec, num_classes, output_dim,
+            num_samples=200, batch_size=args.batch_size
         )
-        val_loader = create_synthetic_dataloader(
-            input_spec, num_classes, num_samples=40, batch_size=args.batch_size
+        val_loader = _create_synthetic_dataloader_for_contract(
+            model_contract, input_spec, num_classes, output_dim,
+            num_samples=40, batch_size=args.batch_size
         )
     else:
         print(f"Using ImageFolder data from: {args.data_dir}")
@@ -693,7 +724,9 @@ def main():
     print("-" * 60)
 
     # Summary
-    print(f"\nFinal: loss={history['train_loss'][-1]:.4f} acc={history['train_acc'][-1]:.1f}%")
+    final_acc = history['train_acc'][-1]
+    acc_str = f" acc={final_acc:.1f}%" if final_acc is not None else ""
+    print(f"\nFinal: loss={history['train_loss'][-1]:.4f}{acc_str}")
     loss_decreased = history["train_loss"][-1] < history["train_loss"][0]
     print(f"Loss decreased: {'YES' if loss_decreased else 'NO'}")
     print(f"Checkpoints saved to: {args.checkpoint_dir}")

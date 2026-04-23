@@ -1,0 +1,40 @@
+artifacts:
+  smoke_test_required: true
+  template_name: text_classification/bert
+compatibility:
+  expected_loss: cross_entropy
+  expected_target_type: categorical
+  output_activation: none
+  target_dtype: int64
+constraints:
+  latency_tier: balanced
+  model_size_mb: 440
+data_type: text
+forward_spec:
+  input_tensor_name: input_ids
+  output_shape:
+  - batch
+  - 5
+  output_tensor_name: logits
+head_spec:
+  dropout: 0.1
+  num_classes: 5
+  pooling: cls_token
+  type: pooled_linear_cls
+input_spec:
+  dtype: int64
+  max_seq_length: 128
+  shape:
+  - 128
+metadata:
+  priority: P1
+  resolver_version: 0.3.0
+  route: text_classification
+model_spec:
+  architecture: bert
+  backbone: bert-tiny
+  family: transformer_encoder
+  hidden_size: 128
+  in_channels: 128
+  pretrained: true
+task_type: classification

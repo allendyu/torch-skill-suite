@@ -1,0 +1,39 @@
+artifacts:
+  smoke_test_required: true
+  template_name: tabular_regression/mlp
+compatibility:
+  expected_loss: mse
+  expected_target_type: continuous
+  output_activation: none
+  target_dtype: float32
+constraints:
+  latency_tier: fast
+  model_size_mb: 5
+data_type: tabular
+forward_spec:
+  input_tensor_name: features
+  output_shape:
+  - batch
+  - 1
+  output_tensor_name: predictions
+head_spec:
+  dropout: 0.2
+  output_dim: 1
+  type: linear_regression
+input_spec:
+  dtype: float32
+  shape:
+  - 18
+metadata:
+  priority: P1
+  resolver_version: 0.2.0
+  route: tabular_regression
+model_spec:
+  architecture: mlp
+  backbone: mlp
+  family: mlp
+  feature_dim: null
+  in_channels: 18
+  in_features: 18
+  pretrained: false
+task_type: regression

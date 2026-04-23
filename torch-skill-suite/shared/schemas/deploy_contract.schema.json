@@ -2,5 +2,172 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "deploy_contract",
   "type": "object",
-  "description": "Placeholder schema for deployment contract."
+  "description": "Deployment contract schema for PyTorch model export, serving, and inference. Defines export format, service configuration, preprocessing/postprocessing pipelines, and performance targets. Produced by torch-infer-deploy skill.",
+  "properties": {
+    "export": {
+      "type": "object",
+      "description": "Model export configuration.",
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["torchscript", "onnx"],
+          "description": "Target export format."
+        },
+        "opset_version": {
+          "type": "integer",
+          "minimum": 11,
+          "default": 17,
+          "description": "ONNX opset version (only applies when format is onnx)."
+        },
+        "dynamic_axes": {
+          "type": "object",
+          "description": "Dynamic axes configuration for ONNX export. Keys are tensor names, values map axis indices to axis names.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "torchscript_mode": {
+          "type": "string",
+          "enum": ["trace", "script"],
+          "default": "trace",
+          "description": "TorchScript export mode: 'trace' uses torch.jit.trace, 'script' uses torch.jit.script."
+        },
+        "half": {
+          "type": "boolean",
+          "default": false,
+          "description": "Export with half-precision (FP16)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "description": "Serving service configuration.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["fastapi", "batch"],
+          "default": "fastapi",
+          "description": "Serving mode: 'fastapi' for online REST API, 'batch' for offline batch inference."
+        },
+        "host": {
+          "type": "string",
+          "default": "0.0.0.0",
+          "description": "Bind address for the service."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 8000,
+          "description": "Bind port for the service."
+        },
+        "workers": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Number of worker processes."
+        },
+        "max_batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 32,
+          "description": "Maximum batch size for batch inference."
+        }
+      },
+      "additionalProperties": false
+    },
+    "preprocessing": {
+      "type": "object",
+      "description": "Input preprocessing pipeline configuration.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Pipeline name (e.g. imagenet_norm, resize_only, segmentation_norm, tokenize)."
+        },
+        "input_format": {
+          "type": "string",
+          "enum": ["image_file", "numpy_array", "text", "raw_tensor"],
+          "default": "image_file",
+          "description": "Expected input data format."
+        },
+        "resize": {
+          "type": "object",
+          "description": "Resize dimensions.",
+          "properties": {
+            "height": { "type": "integer", "minimum": 1 },
+            "width": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        },
+        "normalize": {
+          "type": "object",
+          "description": "Normalization parameters (mean and std).",
+          "properties": {
+            "mean": {
+              "type": "array",
+              "items": { "type": "number" },
+              "description": "Per-channel mean values."
+            },
+            "std": {
+              "type": "array",
+              "items": { "type": "number" },
+              "description": "Per-channel standard deviation values."
+            }
+          },
+          "additionalProperties": false
+        },
+        "tokenizer": {
+          "type": "string",
+          "description": "Tokenizer name for text models (e.g. bert-base-uncased)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "postprocessing": {
+      "type": "object",
+      "description": "Output postprocessing configuration.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["softmax_topk", "argmax", "sigmoid", "none"],
+          "default": "softmax_topk",
+          "description": "Postprocessing operation type."
+        },
+        "topk": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of top predictions to return (required when type is softmax_topk)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "performance": {
+      "type": "object",
+      "description": "Performance targets and inference batch configuration.",
+      "properties": {
+        "target_latency_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Target inference latency in milliseconds."
+        },
+        "target_throughput_qps": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Target throughput in queries per second."
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Inference batch size."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
 }

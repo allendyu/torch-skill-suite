@@ -1,0 +1,44 @@
+data_format_option: user_provided
+data_type: image
+input_spec:
+  channels_first: true
+  dtype: float32
+  shape:
+  - 3
+  - 224
+  - 224
+metadata:
+  source: Road scene segmentation example
+output_spec:
+  mask_shape:
+  - 224
+  - 224
+  num_classes: 4
+  type: mask
+preprocessing:
+- name: resize
+  params:
+    size:
+    - 224
+    - 224
+- name: normalize
+  params:
+    mean:
+    - 0.485
+    - 0.456
+    - 0.406
+    std:
+    - 0.229
+    - 0.224
+    - 0.225
+splits:
+  test: data/images/test
+  train: data/images/train
+  val: data/images/val
+task_type: segmentation
+user_format_spec:
+  details:
+    image_dir: data/images
+    mask_dir: data/masks
+    pairing_rule: Match image and mask by identical basename under the same split.
+  format_type: ImageMaskPairs

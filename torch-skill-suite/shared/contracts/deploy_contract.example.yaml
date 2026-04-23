@@ -1,5 +1,126 @@
-format: onnx
-service: fastapi
-preprocess: imagenet_norm
-postprocess: softmax_topk
-batch_infer: true
+# deploy_contract.example.yaml
+# Named deployment contract examples for torch-infer-deploy skill.
+# Each entry is a complete deploy_contract consumable by export/serve/infer scripts.
+
+image_classification_torchscript_fastapi:
+  export:
+    format: torchscript
+    torchscript_mode: trace
+    half: false
+  service:
+    type: fastapi
+    host: "0.0.0.0"
+    port: 8000
+    workers: 1
+  preprocessing:
+    name: imagenet_norm
+    input_format: image_file
+    resize:
+      height: 224
+      width: 224
+    normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+  postprocessing:
+    type: softmax_topk
+    topk: 5
+  performance:
+    target_latency_ms: 50
+    target_throughput_qps: 100
+    batch_size: 1
+
+image_classification_onnx_batch:
+  export:
+    format: onnx
+    opset_version: 17
+    dynamic_axes:
+      input:
+        0: batch
+      output:
+        0: batch
+  service:
+    type: batch
+    max_batch_size: 64
+  preprocessing:
+    name: imagenet_norm
+    input_format: image_file
+    resize:
+      height: 224
+      width: 224
+    normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+  postprocessing:
+    type: argmax
+  performance:
+    target_throughput_qps: 1000
+    batch_size: 32
+
+image_segmentation_torchscript:
+  export:
+    format: torchscript
+    torchscript_mode: trace
+  service:
+    type: fastapi
+  preprocessing:
+    name: segmentation_norm
+    input_format: image_file
+    resize:
+      height: 224
+      width: 224
+    normalize:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+  postprocessing:
+    type: argmax
+  performance:
+    target_latency_ms: 100
+    batch_size: 1
+
+text_classification_torchscript:
+  export:
+    format: torchscript
+    torchscript_mode: trace
+  service:
+    type: fastapi
+  preprocessing:
+    name: tokenize
+    input_format: text
+    tokenizer: bert-base-uncased
+  postprocessing:
+    type: softmax_topk
+    topk: 3
+  performance:
+    target_latency_ms: 30
+    batch_size: 1
+
+tabular_classification_torchscript:
+  export:
+    format: torchscript
+    torchscript_mode: trace
+  service:
+    type: fastapi
+  preprocessing:
+    name: tabular_cls_prep
+    input_format: numpy_array
+  postprocessing:
+    type: softmax_topk
+    topk: 3
+  performance:
+    target_latency_ms: 10
+    batch_size: 1
+
+tabular_regression_torchscript:
+  export:
+    format: torchscript
+    torchscript_mode: trace
+  service:
+    type: fastapi
+  preprocessing:
+    name: tabular_reg_prep
+    input_format: numpy_array
+  postprocessing:
+    type: none
+  performance:
+    target_latency_ms: 10
+    batch_size: 1
