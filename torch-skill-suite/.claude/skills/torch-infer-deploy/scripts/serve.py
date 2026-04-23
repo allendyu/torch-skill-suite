@@ -44,31 +44,34 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 def _load_yaml(path):
-    if yaml is not None:
+    try:
+        if yaml is not None:
+            with open(path, "r", encoding="utf-8") as fh:
+                return yaml.safe_load(fh)
         with open(path, "r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh)
-    with open(path, "r", encoding="utf-8") as fh:
-        text = fh.read()
-    result = {}
-    for line in text.splitlines():
-        if ":" in line and not line.strip().startswith("#"):
-            parts = line.split(":", 1)
-            key = parts[0].strip()
-            val = parts[1].strip()
-            if val in ("true", "True"):
-                val = True
-            elif val in ("false", "False"):
-                val = False
-            else:
-                try:
-                    val = int(val)
-                except ValueError:
+            text = fh.read()
+        result = {}
+        for line in text.splitlines():
+            if ":" in line and not line.strip().startswith("#"):
+                parts = line.split(":", 1)
+                key = parts[0].strip()
+                val = parts[1].strip()
+                if val in ("true", "True"):
+                    val = True
+                elif val in ("false", "False"):
+                    val = False
+                else:
                     try:
-                        val = float(val)
+                        val = int(val)
                     except ValueError:
-                        val = val.strip("'\"")
-            result[key] = val
-    return result
+                        try:
+                            val = float(val)
+                        except ValueError:
+                            val = val.strip("'\"")
+                result[key] = val
+        return result
+    except (FileNotFoundError, OSError):
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -143,16 +146,22 @@ def create_app(model_path, model_contract_path, deploy_contract_path=None):
     from local_infer import create_preprocessing_pipeline
     pipeline = create_preprocessing_pipeline(preprocessing_config, model_contract)
 
-    # Load model
+    # Load model (fail gracefully so health endpoint can report status)
     from local_infer import load_exported_model
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = load_exported_model(model_path, device)
-    inference_model = InferenceModel(model, model_contract, preprocessing_config, postprocessing_config)
+    inference_model = None
+    model_load_error = None
+    try:
+        model = load_exported_model(model_path, device)
+        inference_model = InferenceModel(model, model_contract, preprocessing_config, postprocessing_config)
+    except Exception as e:
+        model_load_error = str(e)
 
     # Store on app state
     app.state.model = inference_model
     app.state.pipeline = pipeline
     app.state.model_path = str(model_path)
+    app.state.model_load_error = model_load_error
 
     # -----------------------------------------------------------------------
     # Routes
@@ -163,11 +172,14 @@ def create_app(model_path, model_contract_path, deploy_contract_path=None):
         """Health check endpoint."""
         model_loaded = app.state.model is not None
         status = "ok" if model_loaded else "error"
-        return {
+        result = {
             "status": status,
             "model": app.state.model_path,
             "device": "cuda" if torch.cuda.is_available() else "cpu",
         }
+        if app.state.model_load_error:
+            result["error"] = app.state.model_load_error
+        return result
 
     @app.post("/predict", response_model=dict)
     async def predict(file: UploadFile = File(...)):

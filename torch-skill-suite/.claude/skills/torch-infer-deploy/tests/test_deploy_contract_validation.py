@@ -2,24 +2,36 @@
 
 import json
 import sys
+import types
 from pathlib import Path
 
 import pytest
 
-SCRIPT_DIR = Path(__file__).resolve().parent.parent / "scripts"
-sys.path.insert(0, str(SCRIPT_DIR))
+# Load validate_contract directly to avoid namespace collision with
+# torch-model/scripts/validate_contract.py when running all-skill tests.
+_script_dir = Path(__file__).resolve().parent.parent / "scripts"
+sys.path.insert(0, str(_script_dir))
+_validate_mod_name = "validate_contract_deploy"
+if _validate_mod_name not in sys.modules:
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location(
+        _validate_mod_name, _script_dir / "validate_contract.py"
+    )
+    _mod = importlib.util.module_from_spec(_spec)
+    sys.modules[_validate_mod_name] = _mod
+    _spec.loader.exec_module(_mod)
+else:
+    _mod = sys.modules[_validate_mod_name]
 
-from validate_contract import (
-    _validate_builtin,
-    _load_yaml,
-    find_schema,
-    find_shared_catalog,
-    validate_contract,
-    VALID_EXPORT_FORMATS,
-    VALID_SERVICE_TYPES,
-    VALID_INPUT_FORMATS,
-    VALID_POSTPROCESS_TYPES,
-)
+_validate_builtin = _mod._validate_builtin
+_load_yaml = _mod._load_yaml
+find_schema = _mod.find_schema
+find_shared_catalog = _mod.find_shared_catalog
+validate_contract = _mod.validate_contract
+VALID_EXPORT_FORMATS = _mod.VALID_EXPORT_FORMATS
+VALID_SERVICE_TYPES = _mod.VALID_SERVICE_TYPES
+VALID_INPUT_FORMATS = _mod.VALID_INPUT_FORMATS
+VALID_POSTPROCESS_TYPES = _mod.VALID_POSTPROCESS_TYPES
 
 
 def _make_valid_contract():

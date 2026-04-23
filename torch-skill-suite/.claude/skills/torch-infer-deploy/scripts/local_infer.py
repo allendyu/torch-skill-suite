@@ -99,7 +99,11 @@ def load_exported_model(model_path, device="cpu"):
         session = ort.InferenceSession(str(path))
         return session
     else:
-        model = torch.jit.load(str(path), map_location=device)
+        try:
+            model = torch.jit.load(str(path), map_location=device)
+        except (RuntimeError, AssertionError):
+            # Fall back to CPU if CUDA loading fails (e.g. broken driver)
+            model = torch.jit.load(str(path), map_location="cpu")
         model.eval()
         return model
 
