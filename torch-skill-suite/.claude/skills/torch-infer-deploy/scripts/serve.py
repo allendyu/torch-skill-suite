@@ -13,16 +13,17 @@ Usage:
 
 import argparse
 import io
-import json
 import sys
 from pathlib import Path
 
 import torch
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+# Add shared package to path
+_SHARED_PYTHON = Path(__file__).resolve().parent.parent.parent.parent.parent / "shared" / "python"
+if str(_SHARED_PYTHON) not in sys.path:
+    sys.path.insert(0, str(_SHARED_PYTHON))
+
+from torch_skill_shared.yaml_utils import load_yaml
 
 # FastAPI is an optional dependency
 try:
@@ -37,41 +38,6 @@ try:
     from PIL import Image
 except ImportError:
     Image = None
-
-
-# ---------------------------------------------------------------------------
-# YAML helper
-# ---------------------------------------------------------------------------
-
-def _load_yaml(path):
-    try:
-        if yaml is not None:
-            with open(path, "r", encoding="utf-8") as fh:
-                return yaml.safe_load(fh)
-        with open(path, "r", encoding="utf-8") as fh:
-            text = fh.read()
-        result = {}
-        for line in text.splitlines():
-            if ":" in line and not line.strip().startswith("#"):
-                parts = line.split(":", 1)
-                key = parts[0].strip()
-                val = parts[1].strip()
-                if val in ("true", "True"):
-                    val = True
-                elif val in ("false", "False"):
-                    val = False
-                else:
-                    try:
-                        val = int(val)
-                    except ValueError:
-                        try:
-                            val = float(val)
-                        except ValueError:
-                            val = val.strip("'\"")
-                result[key] = val
-        return result
-    except (FileNotFoundError, OSError):
-        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -136,8 +102,8 @@ def create_app(model_path, model_contract_path, deploy_contract_path=None):
     app = FastAPI(title="Torch Inference Service", version="0.1.0")
 
     # Load contracts
-    model_contract = _load_yaml(model_contract_path)
-    deploy_contract = _load_yaml(deploy_contract_path) if deploy_contract_path else {}
+    model_contract = load_yaml(model_contract_path)
+    deploy_contract = load_yaml(deploy_contract_path) if deploy_contract_path else {}
 
     preprocessing_config = deploy_contract.get("preprocessing", {})
     postprocessing_config = deploy_contract.get("postprocessing", {"type": "softmax_topk", "topk": 5})

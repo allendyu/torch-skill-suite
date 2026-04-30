@@ -17,6 +17,13 @@ from pathlib import Path
 
 import numpy as np
 
+# Add shared package to path
+_SHARED_PYTHON = Path(__file__).resolve().parent.parent.parent.parent.parent / "shared" / "python"
+if str(_SHARED_PYTHON) not in sys.path:
+    sys.path.insert(0, str(_SHARED_PYTHON))
+
+from torch_skill_shared.yaml_utils import emit_yaml
+
 
 # ---------------------------------------------------------------------------
 # Analysis helpers
@@ -210,42 +217,6 @@ def generate_tuning_plan(history, eval_report=None, target_accuracy=None):
 
 
 # ---------------------------------------------------------------------------
-# YAML output
-# ---------------------------------------------------------------------------
-
-def _emit_yaml(data, indent=0):
-    lines = []
-    prefix = "  " * indent
-    if isinstance(data, dict):
-        for key, value in data.items():
-            if isinstance(value, (dict, list)):
-                lines.append(f"{prefix}{key}:")
-                lines.append(_emit_yaml(value, indent + 1))
-            elif isinstance(value, bool):
-                lines.append(f"{prefix}{key}: {'true' if value else 'false'}")
-            elif isinstance(value, str):
-                lines.append(f"{prefix}{key}: {value}")
-            elif value is None:
-                lines.append(f"{prefix}{key}: null")
-            elif isinstance(value, float):
-                lines.append(f"{prefix}{key}: {value}")
-            else:
-                lines.append(f"{prefix}{key}: {value}")
-    elif isinstance(data, list):
-        for item in data:
-            if isinstance(item, dict):
-                inner = _emit_yaml(item, indent + 1).lstrip()
-                lines.append(f"{prefix}- {inner}")
-            elif isinstance(item, bool):
-                lines.append(f"{prefix}- {'true' if item else 'false'}")
-            elif isinstance(item, str):
-                lines.append(f"{prefix}- {item}")
-            else:
-                lines.append(f"{prefix}- {item}")
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -276,7 +247,7 @@ def main():
 
     plan = generate_tuning_plan(history, eval_report, args.target_accuracy)
 
-    yaml_output = _emit_yaml(plan)
+    yaml_output = emit_yaml(plan)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:
             fh.write(f"# Tuning plan\n{yaml_output}\n")

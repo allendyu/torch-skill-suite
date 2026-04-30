@@ -14,8 +14,6 @@ Usage:
 """
 
 import argparse
-import json
-import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -26,24 +24,22 @@ import torch.nn as nn
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-TRAIN_SCRIPTS_DIR = SCRIPT_DIR / ".." / ".." / "torch-train" / "scripts"
-MODEL_SCRIPTS_DIR = SCRIPT_DIR / ".." / ".." / "torch-model" / "scripts"
 
-for _p in [str(TRAIN_SCRIPTS_DIR.resolve()), str(MODEL_SCRIPTS_DIR.resolve())]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+# Add shared package to path
+_SHARED_PYTHON = SCRIPT_DIR.parent.parent.parent.parent.parent / "shared" / "python"
+if str(_SHARED_PYTHON) not in sys.path:
+    sys.path.insert(0, str(_SHARED_PYTHON))
 
-from train import (
+from torch_skill_shared.yaml_utils import load_yaml, emit_yaml
+from torch_skill_shared.model_builder import (
     build_model_from_contract,
     create_synthetic_dataloader,
     create_synthetic_text_dataloader,
     create_synthetic_segmentation_dataloader,
     create_synthetic_regression_dataloader,
     create_imagefolder_dataloader,
-    _load_yaml,
-    _add_template_path,
+    _create_synthetic_dataloader_for_contract,
 )
-_add_template_path()
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +185,12 @@ def evaluate(model_contract, checkpoint_path, data_contract=None,
     # Build model and load checkpoint
     print("\nBuilding model...")
     model = build_model_from_contract(model_contract)
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    except Exception:
+        print("Warning: This checkpoint requires full unpickling (may contain Python objects).")
+        print("  Only load checkpoints from trusted sources.")
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint["model_state_dict"])
     model = model.to(device)
     model.eval()
@@ -292,40 +293,6 @@ def _create_eval_dataloader(model_contract, input_spec, num_classes, output_dim=
 
 
 # ---------------------------------------------------------------------------
-# YAML output
-# ---------------------------------------------------------------------------
-
-def _emit_yaml(data, indent=0):
-    lines = []
-    prefix = "  " * indent
-    if isinstance(data, dict):
-        for key, value in data.items():
-            if isinstance(value, (dict, list)):
-                lines.append(f"{prefix}{key}:")
-                lines.append(_emit_yaml(value, indent + 1))
-            elif isinstance(value, bool):
-                lines.append(f"{prefix}{key}: {'true' if value else 'false'}")
-            elif isinstance(value, str):
-                lines.append(f"{prefix}{key}: {value}")
-            elif value is None:
-                lines.append(f"{prefix}{key}: null")
-            elif isinstance(value, float):
-                lines.append(f"{prefix}{key}: {value}")
-            else:
-                lines.append(f"{prefix}{key}: {value}")
-    elif isinstance(data, list):
-        for item in data:
-            if isinstance(item, dict):
-                inner = _emit_yaml(item, indent + 1).lstrip()
-                lines.append(f"{prefix}- {inner}")
-            elif isinstance(item, bool):
-                lines.append(f"{prefix}- {'true' if item else 'false'}")
-            else:
-                lines.append(f"{prefix}- {item}")
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -341,10 +308,10 @@ def main():
     args = parser.parse_args()
 
     # Load contracts
-    model_contract = _load_yaml(args.model_contract)
+    model_contract = load_yaml(args.model_contract)
     data_contract = None
     if args.data_contract:
-        data_contract = _load_yaml(args.data_contract)
+        data_contract = load_yaml(args.data_contract)
 
     # Device
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -356,7 +323,7 @@ def main():
     )
 
     # Output
-    yaml_output = _emit_yaml(report)
+    yaml_output = emit_yaml(report)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:
             fh.write(f"# Evaluation report\n{yaml_output}\n")

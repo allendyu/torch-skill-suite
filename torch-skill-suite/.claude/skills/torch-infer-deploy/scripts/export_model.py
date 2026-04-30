@@ -15,7 +15,6 @@ Usage:
 """
 
 import argparse
-import json
 import sys
 import time
 from pathlib import Path
@@ -23,161 +22,13 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+# Add shared package to path
+_SHARED_PYTHON = Path(__file__).resolve().parent.parent.parent.parent.parent / "shared" / "python"
+if str(_SHARED_PYTHON) not in sys.path:
+    sys.path.insert(0, str(_SHARED_PYTHON))
 
-
-# ---------------------------------------------------------------------------
-# YAML helpers
-# ---------------------------------------------------------------------------
-
-class SimpleYAMLParser:
-    def __init__(self, text):
-        self.lines = self._prepare_lines(text)
-
-    def _strip_inline_comment(self, line):
-        in_single, in_double = False, False
-        for ch in line:
-            if ch == "'" and not in_double:
-                in_single = not in_single
-                continue
-            if ch == '"' and not in_single:
-                in_double = not in_double
-                continue
-            if ch == "#" and not in_single and not in_double:
-                idx = line.index(ch)
-                if idx == 0 or line[idx - 1].isspace():
-                    return line[:idx].rstrip()
-        return line.rstrip()
-
-    def _prepare_lines(self, text):
-        return [self._strip_inline_comment(l) for l in text.splitlines()]
-
-    def parse(self):
-        result = {}
-        stack = [(None, 0, result)]
-        for line in self.lines:
-            content = line.rstrip()
-            if not content or content.isspace():
-                continue
-            indent = len(line) - len(line.lstrip())
-            key, value = self._parse_line(content)
-            if key is None:
-                continue
-            while stack and stack[-1][1] >= indent:
-                stack.pop()
-            parent = stack[-1][2]
-            if value is not None:
-                parent[key] = value
-            else:
-                new = {}
-                parent[key] = new
-                stack.append((key, indent, new))
-        return result
-
-    def _parse_line(self, line):
-        content = line.strip()
-        if ":" in content:
-            parts = content.split(":", 1)
-            key = parts[0].strip().strip("'\"")
-            rest = parts[1].strip() if len(parts) > 1 else ""
-            if not rest:
-                return key, None
-            content = rest
-        else:
-            return None, None
-        return key, self._parse_value(content)
-
-    def _parse_value(self, text):
-        if text in ("true", "True", "yes"):
-            return True
-        if text in ("false", "False", "no"):
-            return False
-        if text in ("null", "None", "~"):
-            return None
-        if (text.startswith("[") and text.endswith("]")) or (text.startswith("{") and text.endswith("}")):
-            try:
-                return json.loads(text)
-            except (json.JSONDecodeError, TypeError):
-                return text
-        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
-            return text[1:-1]
-        try:
-            return int(text)
-        except (ValueError, TypeError):
-            pass
-        try:
-            return float(text)
-        except (ValueError, TypeError):
-            pass
-        return text
-
-
-def _load_yaml(path):
-    if yaml is not None:
-        with open(path, "r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh)
-    with open(path, "r", encoding="utf-8") as fh:
-        return SimpleYAMLParser(fh.read()).parse()
-
-
-def _emit_yaml(data):
-    if yaml is not None:
-        return yaml.safe_dump(data, default_flow_style=False, allow_unicode=True)
-    lines = []
-    def _emit(obj, indent=0):
-        prefix = "  " * indent
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                if isinstance(v, (dict, list)):
-                    lines.append(f"{prefix}{k}:")
-                    _emit(v, indent + 1)
-                else:
-                    lines.append(f"{prefix}{k}: {_yaml_value(v)}")
-        elif isinstance(obj, list):
-            for item in obj:
-                if isinstance(item, (dict, list)):
-                    lines.append(f"{prefix}-")
-                    _emit(item, indent + 1)
-                else:
-                    lines.append(f"{prefix}- {_yaml_value(item)}")
-    _emit(data)
-    return "\n".join(lines) + "\n"
-
-
-def _yaml_value(v):
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if v is None:
-        return "null"
-    if isinstance(v, str):
-        if any(c in v for c in ": #{}[]&*!|>'\"%@`"):
-            return f"'{v}'"
-        return v
-    return str(v)
-
-
-# ---------------------------------------------------------------------------
-# Model building (reuse from torch-train via cross-skill import)
-# ---------------------------------------------------------------------------
-
-def _add_template_path():
-    script_dir = Path(__file__).resolve().parent
-    train_scripts_dir = script_dir / ".." / ".." / "torch-train" / "scripts"
-    model_skill_dir = script_dir / ".." / ".." / "torch-model"
-    for d in [train_scripts_dir, model_skill_dir]:
-        resolved = d.resolve()
-        if resolved.exists() and str(resolved) not in sys.path:
-            sys.path.insert(0, str(resolved))
-
-
-def build_model_from_contract(model_contract):
-    """Build model from contract, delegating to torch-train's builder."""
-    _add_template_path()
-    from train import build_model_from_contract as _build
-    return _build(model_contract)
+from torch_skill_shared.yaml_utils import load_yaml, emit_yaml
+from torch_skill_shared.model_builder import build_model_from_contract, create_example_input
 
 
 # ---------------------------------------------------------------------------
@@ -187,10 +38,19 @@ def build_model_from_contract(model_contract):
 def load_checkpoint(model, checkpoint_path, device):
     """Load model weights from a checkpoint file.
 
+    Uses weights_only=True for safety since only model weights are needed.
+    Falls back to full unpickling only for legacy checkpoints with non-tensor metadata.
     Uses strict=False to handle head dimension mismatches gracefully.
     Returns (epoch, best_loss) metadata from the checkpoint.
     """
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    epoch = 0
+    best_loss = float("inf")
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    except Exception:
+        print("Warning: This checkpoint requires full unpickling (may contain Python objects).")
+        print("  Only load checkpoints from trusted sources.")
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     state_dict = checkpoint.get("model_state_dict", checkpoint)
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
     if missing:
@@ -199,37 +59,10 @@ def load_checkpoint(model, checkpoint_path, device):
         print(f"Warning: {len(unexpected)} unexpected key(s) in checkpoint: {unexpected}")
     model.to(device)
     model.eval()
-    epoch = checkpoint.get("epoch", 0) if "model_state_dict" in checkpoint else 0
-    best_loss = checkpoint.get("best_loss", float("inf")) if "model_state_dict" in checkpoint else float("inf")
+    if isinstance(checkpoint, dict):
+        epoch = checkpoint.get("epoch", 0)
+        best_loss = checkpoint.get("best_loss", float("inf"))
     return epoch, best_loss
-
-
-# ---------------------------------------------------------------------------
-# Example input creation
-# ---------------------------------------------------------------------------
-
-def create_example_input(model_contract, batch_size=2, device="cpu"):
-    """Create example input tensors for tracing based on model_contract.
-
-    Returns a tensor or tuple of tensors matching the model's forward signature.
-    """
-    input_spec = model_contract.get("input_spec", {})
-    shape = input_spec.get("shape", [3, 224, 224])
-    dtype_str = input_spec.get("dtype", "float32")
-    dtype = getattr(torch, dtype_str, torch.float32)
-    architecture = model_contract.get("model_spec", {}).get("architecture", "")
-
-    if architecture == "bert":
-        max_seq_length = input_spec.get("max_seq_length", 128)
-        input_ids = torch.randint(1, 1000, (batch_size, max_seq_length), dtype=torch.long)
-        attention_mask = torch.ones(batch_size, max_seq_length, dtype=torch.long)
-        return (input_ids.to(device), attention_mask.to(device))
-    else:
-        if dtype in (torch.int64, torch.int32, torch.long):
-            tensor = torch.randint(0, 1000, (batch_size, *shape), dtype=dtype)
-        else:
-            tensor = torch.randn(batch_size, *shape, dtype=dtype)
-        return tensor.to(device)
 
 
 # ---------------------------------------------------------------------------
@@ -391,7 +224,7 @@ def export(model_contract_path, checkpoint_path, output_dir, format="torchscript
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading model contract: {model_contract_path}")
-    model_contract = _load_yaml(model_contract_path)
+    model_contract = load_yaml(model_contract_path)
 
     print(f"Building model for architecture: {model_contract.get('model_spec', {}).get('architecture', 'unknown')}")
     model = build_model_from_contract(model_contract)
@@ -447,7 +280,7 @@ def export(model_contract_path, checkpoint_path, output_dir, format="torchscript
     }
     report_path = output_dir / "export_report.yaml"
     with open(report_path, "w", encoding="utf-8") as fh:
-        fh.write(_emit_yaml(report))
+        fh.write(emit_yaml(report))
     print(f"Export report saved to: {report_path}")
 
     print(f"\nExport completed successfully!")

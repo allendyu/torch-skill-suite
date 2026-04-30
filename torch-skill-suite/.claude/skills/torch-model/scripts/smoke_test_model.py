@@ -16,106 +16,17 @@ The script:
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 import torch
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+# Add shared package to path
+_SHARED_PYTHON = Path(__file__).resolve().parent.parent.parent.parent.parent / "shared" / "python"
+if str(_SHARED_PYTHON) not in sys.path:
+    sys.path.insert(0, str(_SHARED_PYTHON))
 
-
-class SimpleYAMLParser:
-    def __init__(self, text):
-        self.lines = self._prepare_lines(text)
-
-    def _strip_inline_comment(self, line):
-        in_single, in_double = False, False
-        for i, ch in enumerate(line):
-            if ch == "'" and not in_double:
-                in_single = not in_single
-            elif ch == '"' and not in_single:
-                in_double = not in_double
-            elif ch == "#" and not in_single and not in_double:
-                if i == 0 or line[i - 1].isspace():
-                    return line[:i].rstrip()
-        return line.rstrip()
-
-    def _prepare_lines(self, text):
-        return [self._strip_inline_comment(l) for l in text.splitlines()]
-
-    def parse(self):
-        result = {}
-        stack = [(None, 0, result)]
-        for line in self.lines:
-            content = line.rstrip()
-            if not content or content.isspace():
-                continue
-            indent = len(line) - len(line.lstrip())
-            key, value = self._parse_line(content)
-            if key is None:
-                continue
-            while stack and stack[-1][1] >= indent:
-                stack.pop()
-            parent = stack[-1][2]
-            if value is not None:
-                parent[key] = value
-            else:
-                new = {}
-                parent[key] = new
-                stack.append((key, indent, new))
-        return result
-
-    def _parse_line(self, line):
-        content = line.strip()
-        if content.startswith("- "):
-            content = content[2:]
-            key = None
-        elif ":" in content:
-            parts = content.split(":", 1)
-            key = parts[0].strip().strip("'\"")
-            rest = parts[1].strip() if len(parts) > 1 else ""
-            if not rest:
-                return key, None
-            content = rest
-        else:
-            return None, None
-        return key, self._parse_value(content)
-
-    def _parse_value(self, text):
-        if text in ("true", "True", "yes"):
-            return True
-        if text in ("false", "False", "no"):
-            return False
-        if text in ("null", "None", "~"):
-            return None
-        if (text.startswith("[") and text.endswith("]")) or (text.startswith("{") and text.endswith("}")):
-            try:
-                return json.loads(text)
-            except (json.JSONDecodeError, TypeError):
-                return text
-        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
-            return text[1:-1]
-        try:
-            return int(text)
-        except (ValueError, TypeError):
-            pass
-        try:
-            return float(text)
-        except (ValueError, TypeError):
-            pass
-        return text
-
-
-def _load_yaml(path):
-    if yaml is not None:
-        with open(path, "r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh)
-    with open(path, "r", encoding="utf-8") as fh:
-        return SimpleYAMLParser(fh.read()).parse()
+from torch_skill_shared.yaml_utils import load_yaml
 
 
 def _add_template_path():
@@ -295,7 +206,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=2, help="Batch size for dummy input (default: 2)")
     args = parser.parse_args()
 
-    model_contract = _load_yaml(args.model_contract)
+    model_contract = load_yaml(args.model_contract)
     success = smoke_test(model_contract, batch_size=args.batch_size)
     sys.exit(0 if success else 1)
 

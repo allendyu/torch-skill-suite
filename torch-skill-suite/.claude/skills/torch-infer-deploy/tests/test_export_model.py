@@ -17,7 +17,6 @@ from export_model import (
     load_checkpoint,
     export_torchscript,
     validate_exported_model,
-    _load_yaml,
 )
 
 

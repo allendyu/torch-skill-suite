@@ -26,51 +26,18 @@ import torch
 import torch.nn.functional as F
 from torchvision import transforms
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+# Add shared package to path
+_SHARED_PYTHON = Path(__file__).resolve().parent.parent.parent.parent.parent / "shared" / "python"
+if str(_SHARED_PYTHON) not in sys.path:
+    sys.path.insert(0, str(_SHARED_PYTHON))
+
+from torch_skill_shared.yaml_utils import load_yaml
+from torch_skill_shared.model_builder import create_example_input
 
 try:
     from PIL import Image
 except ImportError:
     Image = None
-
-
-# ---------------------------------------------------------------------------
-# YAML helpers
-# ---------------------------------------------------------------------------
-
-def _load_yaml(path):
-    if yaml is not None:
-        with open(path, "r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh)
-    # Minimal fallback for reading simple configs
-    import json as _json
-    with open(path, "r", encoding="utf-8") as fh:
-        text = fh.read()
-    result = {}
-    for line in text.splitlines():
-        if ":" in line and not line.strip().startswith("#"):
-            parts = line.split(":", 1)
-            key = parts[0].strip()
-            val = parts[1].strip()
-            if val in ("true", "True"):
-                val = True
-            elif val in ("false", "False"):
-                val = False
-            elif val == "null":
-                val = None
-            else:
-                try:
-                    val = int(val)
-                except ValueError:
-                    try:
-                        val = float(val)
-                    except ValueError:
-                        val = val.strip("'\"")
-            result[key] = val
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -320,12 +287,12 @@ def infer(model_path, model_contract_path, deploy_contract_path=None,
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     print(f"Loading model contract: {model_contract_path}")
-    model_contract = _load_yaml(model_contract_path)
+    model_contract = load_yaml(model_contract_path)
 
     deploy_contract = {}
     if deploy_contract_path:
         print(f"Loading deploy contract: {deploy_contract_path}")
-        deploy_contract = _load_yaml(deploy_contract_path)
+        deploy_contract = load_yaml(deploy_contract_path)
 
     print(f"Loading exported model: {model_path}")
     model = load_exported_model(model_path, device)
@@ -337,7 +304,6 @@ def infer(model_path, model_contract_path, deploy_contract_path=None,
     # Get input
     if synthetic:
         print(f"Using synthetic input (batch_size={batch_size})")
-        from export_model import create_example_input
         input_tensor = create_example_input(model_contract, batch_size=batch_size, device=device)
         output = run_inference(model, input_tensor, device)
     elif input_path:

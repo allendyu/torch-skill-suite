@@ -21,7 +21,6 @@ from export_model import (
     build_model_from_contract,
     create_example_input,
     export_torchscript,
-    _load_yaml,
 )
 
 

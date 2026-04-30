@@ -20,6 +20,13 @@ from pathlib import Path
 
 import torch
 
+# Add shared package to path
+_SHARED_PYTHON = Path(__file__).resolve().parent.parent.parent.parent.parent / "shared" / "python"
+if str(_SHARED_PYTHON) not in sys.path:
+    sys.path.insert(0, str(_SHARED_PYTHON))
+
+from torch_skill_shared.yaml_utils import load_yaml
+
 
 def _add_script_paths():
     """Add sibling scripts to sys.path for imports."""
@@ -55,7 +62,6 @@ def smoke_test_export(model_contract_path, checkpoint_path=None, output_dir=None
         export_torchscript,
         _auto_select_torchscript_mode,
         validate_exported_model,
-        _load_yaml,
     )
     from local_infer import load_exported_model, run_inference, apply_postprocessing
 
@@ -70,7 +76,7 @@ def smoke_test_export(model_contract_path, checkpoint_path=None, output_dir=None
 
     # 1. Load contract and build model
     print("\n[1/5] Loading model contract...")
-    model_contract = _load_yaml(model_contract_path)
+    model_contract = load_yaml(model_contract_path)
     architecture = model_contract.get("model_spec", {}).get("architecture", "unknown")
     backbone = model_contract.get("model_spec", {}).get("backbone", "unknown")
     print(f"  Architecture: {architecture}/{backbone}")
