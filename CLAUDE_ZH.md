@@ -25,7 +25,7 @@
 - `shared/schemas/model_contract.schema.json` —— 模型规格（backbone、head、loss 兼容性）
 - `shared/schemas/deploy_contract.schema.json` —— 部署规格（导出格式、服务类型）
 
-示例 contract 位于 `shared/contracts/`。每个 skill 会消费上一个阶段的 contract，并产出供下游阶段使用的 contract。
+规范示例 contract 位于 `shared/contracts/`，文件名使用 `*.example.yaml` 后缀；每个文件都是可直接作为脚手架输入的 schema-valid contract。场景示例和 recipe 位于 `shared/examples/contracts/`。skill 运行时产物通常使用无后缀名称，例如 `data_contract.yaml`、`model_contract.yaml` 和 `deploy_contract.yaml`。每个 skill 会消费上一个阶段的 contract，并产出供下游阶段使用的 contract。
 
 ### Skill 边界
 每个 skill 的职责和边界都记录在对应的 `SKILL.md` 文件中（例如 `torch-skill-suite/.claude/skills/torch-data/SKILL.md`）。关键原则：
@@ -37,10 +37,22 @@
 ## 常用开发任务
 
 ### 校验 Contract
-使用校验脚本根据 JSON Schema 检查 `data_contract.yaml`：
+从包目录（`torch-skill-suite/`）运行校验命令。规范示例文件使用 `*.example.yaml` 后缀：
 ```bash
-python torch-skill-suite/.claude/skills/torch-data/scripts/validate_contract.py --contract path/to/data_contract.yaml
+cd torch-skill-suite
+python .claude/skills/torch-data/scripts/validate_contract.py --contract shared/contracts/data_contract.example.yaml
+python .claude/skills/torch-model/scripts/validate_contract.py --contract shared/contracts/model_contract.example.yaml
+python .claude/skills/torch-infer-deploy/scripts/validate_contract.py --contract shared/contracts/deploy_contract.example.yaml
 ```
+
+### 运行测试
+由于 `pytest.ini` 位于包目录，请从 `torch-skill-suite/` 运行测试：
+```bash
+cd torch-skill-suite
+python -m pytest
+```
+
+当前健康检查：2026-05-07 自检结果为 `199 passed`。测试目前会出现与 `torch.jit.trace`、`torch.jit.save`、`torch.jit.load` 相关的 PyTorch deprecation warning；这些 warning 不会导致测试失败，但部署导出代码后续应跟踪 `torch.export` 迁移路线。
 
 ### 检查数据集
 检查脚本会尝试推断数据集格式：
@@ -61,9 +73,11 @@ python torch-skill-suite/.claude/skills/torch-data/scripts/inspect_dataset.py --
 
 ## 当前状态
 
-- **MVP 阶段**：该套件仍处于早期开发阶段。目前只有 `torch-data` 和 `torch-model` 拥有初始实现。
-- **文档**：`docs/` 目前主要是占位文件；完整设计请参考仓库根目录中的 `torch_skill_suite_plan.md`。
-- **示例**：`examples/` 目前包含图像分类和文本分类场景的占位目录。
+- **MVP 阶段**：六个 skill 均已有初始实现，图像分类路径是当前主要 MVP 路线。
+- **验证状态**：从 `torch-skill-suite/` 运行测试时，当前测试套件通过（2026-05-07 自检为 `199 passed`）；规范 contract 示例均可通过校验。
+- **文档**：`docs/` 已补充架构、工作流和 MVP 状态说明；完整设计仍可参考仓库根目录中的 `torch_skill_suite_plan.md`。
+- **示例**：`shared/contracts/` 包含 schema-valid 的规范 `*.example.yaml` 示例；`shared/examples/contracts/` 和各 skill 本地 `examples/` 目录包含场景化示例。
+- **已知 warning**：TorchScript 导出测试目前会触发 PyTorch 对 `torch.jit.*` 的 deprecation warning；短期应保持 TorchScript 可用，同时评估后续迁移到 `torch.export`。
 
 ## 关键设计原则
 

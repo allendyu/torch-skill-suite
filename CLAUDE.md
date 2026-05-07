@@ -25,7 +25,7 @@ The suite uses four core contract schemas (JSON Schema) to ensure consistency ac
 - `shared/schemas/model_contract.schema.json` — Model specification (backbone, head, loss compatibility)
 - `shared/schemas/deploy_contract.schema.json` — Deployment specification (export format, service type)
 
-Canonical example contracts are in `shared/contracts/`; each file is a single schema-valid contract that can be used directly as a scaffold input. Scenario examples and recipes are in `shared/examples/contracts/`. Each skill consumes contracts from previous stages and produces contracts for downstream stages.
+Canonical example contracts are in `shared/contracts/` and use the `*.example.yaml` suffix; each file is a single schema-valid contract that can be used directly as a scaffold input. Scenario examples and recipes are in `shared/examples/contracts/`. Runtime skill outputs normally use unsuffixed names such as `data_contract.yaml`, `model_contract.yaml`, and `deploy_contract.yaml`. Each skill consumes contracts from previous stages and produces contracts for downstream stages.
 
 ### Skill Boundaries
 Each skill's responsibilities and boundaries are documented in its `SKILL.md` file (e.g., `torch-skill-suite/.claude/skills/torch-data/SKILL.md`). Key principles:
@@ -37,10 +37,22 @@ Each skill's responsibilities and boundaries are documented in its `SKILL.md` fi
 ## Common Development Tasks
 
 ### Validating Contracts
-Use the validation script to check `data_contract.yaml` against the JSON schema:
+Run validation commands from the package directory (`torch-skill-suite/`). The canonical examples use the `*.example.yaml` suffix:
 ```bash
-python torch-skill-suite/.claude/skills/torch-data/scripts/validate_contract.py --contract path/to/data_contract.yaml
+cd torch-skill-suite
+python .claude/skills/torch-data/scripts/validate_contract.py --contract shared/contracts/data_contract.example.yaml
+python .claude/skills/torch-model/scripts/validate_contract.py --contract shared/contracts/model_contract.example.yaml
+python .claude/skills/torch-infer-deploy/scripts/validate_contract.py --contract shared/contracts/deploy_contract.example.yaml
 ```
+
+### Running Tests
+Run the test suite from the package directory because `pytest.ini` lives there:
+```bash
+cd torch-skill-suite
+python -m pytest
+```
+
+Current health check: `199 passed` on 2026-05-07. The suite currently emits PyTorch deprecation warnings around `torch.jit.trace`, `torch.jit.save`, and `torch.jit.load`; these do not fail tests, but deployment export code should track the future `torch.export` migration path.
 
 ### Inspecting Datasets
 The inspection script attempts to infer dataset format:
@@ -63,8 +75,10 @@ Skills are automatically triggered when user requests match their descriptions (
 ## Current State
 
 - **MVP phase**: All six skills now have initial implementations, with the image-classification path serving as the primary MVP route.
-- **Documentation**: `docs/` contains placeholder files; refer to `torch_skill_suite_plan.md` in the repository root for the comprehensive design.
-- **Examples**: `shared/contracts/` contains canonical schema-valid examples; `shared/examples/contracts/` and skill-local `examples/` directories contain scenario-specific examples.
+- **Validation**: The package test suite currently passes (`199 passed` as of 2026-05-07) when run from `torch-skill-suite/`; canonical contract examples validate successfully.
+- **Documentation**: `docs/` now describes the architecture, workflow, and MVP status; refer to `torch_skill_suite_plan.md` in the repository root for the comprehensive design.
+- **Examples**: `shared/contracts/` contains canonical schema-valid `*.example.yaml` contracts; `shared/examples/contracts/` and skill-local `examples/` directories contain scenario-specific examples.
+- **Known warnings**: TorchScript export tests currently raise PyTorch deprecation warnings for `torch.jit.*`; keep TorchScript support working while evaluating `torch.export` for future deployment artifacts.
 
 ## Key Design Principles
 
