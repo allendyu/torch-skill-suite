@@ -25,7 +25,7 @@ The suite uses four core contract schemas (JSON Schema) to ensure consistency ac
 - `shared/schemas/model_contract.schema.json` — Model specification (backbone, head, loss compatibility)
 - `shared/schemas/deploy_contract.schema.json` — Deployment specification (export format, service type)
 
-Example contracts are in `shared/contracts/`. Each skill consumes contracts from previous stages and produces contracts for downstream stages.
+Canonical example contracts are in `shared/contracts/`; each file is a single schema-valid contract that can be used directly as a scaffold input. Scenario examples and recipes are in `shared/examples/contracts/`. Each skill consumes contracts from previous stages and produces contracts for downstream stages.
 
 ### Skill Boundaries
 Each skill's responsibilities and boundaries are documented in its `SKILL.md` file (e.g., `torch-skill-suite/.claude/skills/torch-data/SKILL.md`). Key principles:
@@ -55,15 +55,16 @@ Skills are automatically triggered when user requests match their descriptions (
 
 - `torch-skill-suite/.claude/skills/` — Skill definitions (SKILL.md files)
 - `torch-skill-suite/shared/schemas/` — JSON Schema files for contracts
-- `torch-skill-suite/shared/contracts/` — Example contract YAML files
+- `torch-skill-suite/shared/contracts/` — Canonical schema-valid contract example YAML files
+- `torch-skill-suite/shared/examples/contracts/` — Scenario contract examples and recipes
 - `torch-skill-suite/examples/` — Placeholder example workspaces (MVP in progress)
 - `torch-skill-suite/docs/` — Architecture and workflow documentation (currently placeholders)
 
 ## Current State
 
-- **MVP phase**: The suite is in early development. Currently, only `torch-data` and `torch-model` have initial implementations.
+- **MVP phase**: All six skills now have initial implementations, with the image-classification path serving as the primary MVP route.
 - **Documentation**: `docs/` contains placeholder files; refer to `torch_skill_suite_plan.md` in the repository root for the comprehensive design.
-- **Examples**: `examples/` contains placeholder directories for image classification and text classification scenarios.
+- **Examples**: `shared/contracts/` contains canonical schema-valid examples; `shared/examples/contracts/` and skill-local `examples/` directories contain scenario-specific examples.
 
 ## Key Design Principles
 

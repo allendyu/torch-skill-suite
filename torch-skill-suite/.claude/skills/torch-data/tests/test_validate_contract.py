@@ -25,6 +25,11 @@ def test_validate_examples_pass_by_default():
     assert "All standalone example contracts are valid" in proc.stdout
 
 
+def test_validate_shared_examples_pass():
+    proc = run_validate(["--validate-shared-examples", "--schema", str(SCHEMA_PATH)], expect_success=True)
+    assert "All shared data contract examples are valid" in proc.stdout
+
+
 def test_reports_multiple_errors(tmp_path):
     contract = tmp_path / "bad.yaml"
     contract.write_text(

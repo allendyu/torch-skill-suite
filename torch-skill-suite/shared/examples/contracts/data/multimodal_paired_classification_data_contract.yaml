@@ -1,0 +1,44 @@
+# Scenario data contract example: multimodal_paired_classification.
+
+data_type: multimodal
+task_type: classification
+input_spec:
+  image:
+    shape:
+    - 3
+    - 224
+    - 224
+    dtype: float32
+    channels_first: true
+  text:
+    sequence_length: 128
+    vocab_size: 30522
+    dtype: int64
+output_spec:
+  type: categorical
+  num_classes: 4
+splits:
+  train: data/train_manifest.jsonl
+  val: data/val_manifest.jsonl
+  test: data/test_manifest.jsonl
+preprocessing:
+- name: resize_image
+  params:
+    size:
+    - 224
+    - 224
+- name: tokenize_text
+  params:
+    tokenizer: bert-base-uncased
+    max_length: 128
+data_format_option: user_provided
+user_format_spec:
+  format_type: JSONLManifest
+  details:
+    fields:
+      image_path: path to image file
+      text: free-form text field
+      label: integer class label
+    pairing_rule: Each JSONL row defines one aligned image-text-label sample.
+metadata:
+  source: Multimodal product moderation example

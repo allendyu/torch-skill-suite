@@ -1,0 +1,37 @@
+# Scenario data contract example: audio_classification.
+
+data_type: audio
+task_type: classification
+input_spec:
+  sample_rate: 16000
+  duration: 5.0
+  shape:
+  - 1
+  - 80000
+  dtype: float32
+output_spec:
+  type: categorical
+  num_classes: 8
+splits:
+  train: data/audio/train
+  val: data/audio/val
+  test: data/audio/test
+preprocessing:
+- name: resample
+  params:
+    sample_rate: 16000
+- name: to_mel_spectrogram
+  params:
+    n_mels: 64
+    hop_length: 512
+data_format_option: auto_inferred
+inferred_format_spec:
+  format_type: AudioFolderWithMetadata
+  details:
+    audio_extensions:
+    - .wav
+    - .flac
+    - .mp3
+    label_source: directory names or metadata CSV
+metadata:
+  source: Urban sound classification example

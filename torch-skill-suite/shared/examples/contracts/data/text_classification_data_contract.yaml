@@ -1,0 +1,37 @@
+# Scenario data contract example: text_classification.
+
+data_type: text
+task_type: classification
+input_spec:
+  sequence_length: 512
+  vocab_size: 30522
+  dtype: int64
+output_spec:
+  type: categorical
+  num_classes: 5
+  label_map:
+    0: negative
+    1: somewhat_negative
+    2: neutral
+    3: somewhat_positive
+    4: positive
+splits:
+  train: data/train.csv
+  val: data/val.csv
+  test: data/test.csv
+preprocessing:
+- name: tokenize
+  params:
+    tokenizer: bert-base-uncased
+    max_length: 512
+data_format_option: auto_inferred
+inferred_format_spec:
+  format_type: CSV
+  details:
+    columns:
+    - text
+    - label
+    delimiter: ','
+    encoding: utf-8
+metadata:
+  source: Sentiment analysis dataset

@@ -1,0 +1,32 @@
+# Scenario data contract example: tabular_classification.
+
+data_type: tabular
+task_type: classification
+input_spec:
+  num_features: 30
+  dtype: float32
+output_spec:
+  type: categorical
+  num_classes: 2
+  label_map:
+    0: benign
+    1: malignant
+splits:
+  train: data/train.csv
+  val: data/val.csv
+  test: data/test.csv
+preprocessing:
+- name: impute
+  params:
+    strategy: median
+- name: scale
+  params:
+    method: standard
+data_format_option: user_provided
+user_format_spec:
+  format_type: CSV
+  details:
+    header: true
+    target_column: target
+metadata:
+  source: Medical dataset

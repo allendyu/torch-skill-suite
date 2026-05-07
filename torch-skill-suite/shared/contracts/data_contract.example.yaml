@@ -1,313 +1,50 @@
-# Example data contract showcasing multiple data types and task types.
-# This catalog provides compact suite-level examples; fuller standalone examples live under .claude/skills/torch-data/examples/.
+# Canonical data contract example for the suite MVP path.
+# This file is a single schema-valid contract, not a multi-example catalog.
 
-# --- Example 1: Image Classification (user_provided format) ---
-image_classification:
-  data_type: image
-  task_type: classification
-  input_spec:
-    shape: [3, 224, 224]
-    dtype: float32
-    channels_first: true
-  output_spec:
-    type: categorical
-    num_classes: 3
-    label_map:
-      0: cat
-      1: dog
-      2: bird
-  splits:
-    train: data/train
-    val: data/val
-    test: data/test
-  preprocessing:
-    - name: resize
-      params: { size: [224, 224] }
-    - name: normalize
-      params: { mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225] }
-  data_format_option: user_provided
-  user_format_spec:
-    format_type: ImageFolder
-    details:
-      structure: "class folders inside split folders"
-      extensions: [".jpg", ".png"]
-  metadata:
-    source: "Imagenet subset"
-    license: "CC-BY"
-
-# --- Example 2: Text Classification (auto_inferred format) ---
-text_classification:
-  data_type: text
-  task_type: classification
-  input_spec:
-    sequence_length: 512
-    vocab_size: 30522
-    dtype: int64
-  output_spec:
-    type: categorical
-    num_classes: 5
-    label_map:
-      0: negative
-      1: somewhat_negative
-      2: neutral
-      3: somewhat_positive
-      4: positive
-  splits:
-    train: data/train.csv
-    val: data/val.csv
-    test: data/test.csv
-  preprocessing:
-    - name: tokenize
-      params: { tokenizer: "bert-base-uncased", max_length: 512 }
-  data_format_option: auto_inferred
-  inferred_format_spec:
-    format_type: CSV
-    details:
-      columns: ["text", "label"]
-      delimiter: ","
-      encoding: "utf-8"
-  metadata:
-    source: "Sentiment analysis dataset"
-
-# --- Example 3: Time Series Regression (user_provided format) ---
-time_series_regression:
-  data_type: time_series
-  task_type: regression
-  input_spec:
-    shape: [100, 5]
-    dtype: float32
-  output_spec:
-    type: continuous
-    output_dim: 1
-  splits:
-    train: 0.7
-    val: 0.15
-    test: 0.15
-  preprocessing:
-    - name: standardize
-      params: { per_feature: true }
-  data_format_option: user_provided
-  user_format_spec:
-    format_type: NPZ
-    details:
-      keys: ["X", "y"]
-      shape: "(n_samples, 100, 5)"
-  metadata:
-    description: "Multivariate time series predicting continuous value"
-
-# --- Example 4: Object Detection (auto_inferred format) ---
-object_detection:
-  data_type: image
-  task_type: detection
-  input_spec:
-    shape: [3, 640, 640]
-    dtype: uint8
-    channels_first: true
-  output_spec:
-    type: bounding_box
-    bbox_format: xywh
-  splits:
-    train: data/images/train
-    val: data/images/val
-  preprocessing:
-    - name: resize
-      params: { size: [640, 640], keep_aspect_ratio: true }
-    - name: normalize
-      params: { scale: 1/255.0 }
-  data_format_option: auto_inferred
-  inferred_format_spec:
-    format_type: YOLO
-    details:
-      label_dir: data/labels
-      class_file: data/classes.txt
-  metadata:
-    annotation_format: "YOLO darknet"
-
-# --- Example 5: Tabular Classification (user_provided format) ---
-tabular_classification:
-  data_type: tabular
-  task_type: classification
-  input_spec:
-    num_features: 30
-    dtype: float32
-  output_spec:
-    type: categorical
-    num_classes: 2
-    label_map:
-      0: benign
-      1: malignant
-  splits:
-    train: data/train.csv
-    val: data/val.csv
-    test: data/test.csv
-  preprocessing:
-    - name: impute
-      params: { strategy: median }
-    - name: scale
-      params: { method: standard }
-  data_format_option: user_provided
-  user_format_spec:
-    format_type: CSV
-    details:
-      header: true
-      target_column: target
-  metadata:
-    source: "Medical dataset"
-
-# --- Example 6: Image Segmentation (user_provided format) ---
-image_segmentation:
-  data_type: image
-  task_type: segmentation
-  input_spec:
-    shape: [3, 512, 512]
-    dtype: float32
-    channels_first: true
-  output_spec:
-    type: mask
-    mask_shape: [512, 512]
-    num_classes: 4
-  splits:
-    train: data/images/train
-    val: data/images/val
-    test: data/images/test
-  preprocessing:
-    - name: resize
-      params: { size: [512, 512] }
-    - name: normalize
-      params: { mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225] }
-  data_format_option: user_provided
-  user_format_spec:
-    format_type: ImageMaskPairs
-    details:
-      image_dir: data/images
-      mask_dir: data/masks
-      pairing_rule: "Match image and mask by identical basename under the same split."
-  metadata:
-    source: "Road scene segmentation example"
-
-# --- Example 7: Tabular Regression (user_provided format) ---
-tabular_regression:
-  data_type: tabular
-  task_type: regression
-  input_spec:
-    num_features: 18
-    dtype: float32
-  output_spec:
-    type: continuous
-    output_dim: 1
-  splits:
-    train: data/train.csv
-    val: data/val.csv
-    test: data/test.csv
-  preprocessing:
-    - name: impute
-      params: { strategy: median }
-    - name: encode_categorical
-      params: { strategy: one_hot }
-    - name: scale
-      params: { method: standard }
-  data_format_option: user_provided
-  user_format_spec:
-    format_type: CSV
-    details:
-      header: true
-      target_column: sale_price
-  metadata:
-    source: "Housing price regression example"
-
-# --- Example 8: Audio Classification (auto_inferred format) ---
-audio_classification:
-  data_type: audio
-  task_type: classification
-  input_spec:
-    sample_rate: 16000
-    duration: 5.0
-    shape: [1, 80000]
-    dtype: float32
-  output_spec:
-    type: categorical
-    num_classes: 8
-  splits:
-    train: data/audio/train
-    val: data/audio/val
-    test: data/audio/test
-  preprocessing:
-    - name: resample
-      params: { sample_rate: 16000 }
-    - name: to_mel_spectrogram
-      params: { n_mels: 64, hop_length: 512 }
-  data_format_option: auto_inferred
-  inferred_format_spec:
-    format_type: AudioFolderWithMetadata
-    details:
-      audio_extensions: [".wav", ".flac", ".mp3"]
-      label_source: "directory names or metadata CSV"
-  metadata:
-    source: "Urban sound classification example"
-
-# --- Example 9: Video Classification (auto_inferred format) ---
-video_classification:
-  data_type: video
-  task_type: classification
-  input_spec:
-    shape: [3, 16, 224, 224]
-    fps: 30
-    duration: 2.0
-    dtype: uint8
-  output_spec:
-    type: categorical
-    num_classes: 6
-  splits:
-    train: data/videos/train
-    val: data/videos/val
-    test: data/videos/test
-  preprocessing:
-    - name: temporal_subsample
-      params: { num_frames: 16, strategy: uniform }
-    - name: resize
-      params: { size: [224, 224] }
-  data_format_option: auto_inferred
-  inferred_format_spec:
-    format_type: VideoFolder
-    details:
-      video_extensions: [".mp4", ".avi", ".mkv"]
-      label_source: "directory names or manifest"
-  metadata:
-    source: "Action recognition example"
-
-# --- Example 10: Multimodal Paired Classification (user_provided format) ---
-multimodal_paired_classification:
-  data_type: multimodal
-  task_type: classification
-  input_spec:
-    image:
-      shape: [3, 224, 224]
-      dtype: float32
-      channels_first: true
-    text:
-      sequence_length: 128
-      vocab_size: 30522
-      dtype: int64
-  output_spec:
-    type: categorical
-    num_classes: 4
-  splits:
-    train: data/train_manifest.jsonl
-    val: data/val_manifest.jsonl
-    test: data/test_manifest.jsonl
-  preprocessing:
-    - name: resize_image
-      params: { size: [224, 224] }
-    - name: tokenize_text
-      params: { tokenizer: "bert-base-uncased", max_length: 128 }
-  data_format_option: user_provided
-  user_format_spec:
-    format_type: JSONLManifest
-    details:
-      fields:
-        image_path: path to image file
-        text: free-form text field
-        label: integer class label
-      pairing_rule: "Each JSONL row defines one aligned image-text-label sample."
-  metadata:
-    source: "Multimodal product moderation example"
+data_type: image
+task_type: classification
+input_spec:
+  shape:
+  - 3
+  - 224
+  - 224
+  dtype: float32
+  channels_first: true
+output_spec:
+  type: categorical
+  num_classes: 3
+  label_map:
+    0: cat
+    1: dog
+    2: bird
+splits:
+  train: data/train
+  val: data/val
+  test: data/test
+preprocessing:
+- name: resize
+  params:
+    size:
+    - 224
+    - 224
+- name: normalize
+  params:
+    mean:
+    - 0.485
+    - 0.456
+    - 0.406
+    std:
+    - 0.229
+    - 0.224
+    - 0.225
+data_format_option: user_provided
+user_format_spec:
+  format_type: ImageFolder
+  details:
+    structure: class folders inside split folders
+    extensions:
+    - .jpg
+    - .png
+metadata:
+  source: Imagenet subset
+  license: CC-BY

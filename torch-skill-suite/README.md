@@ -13,9 +13,10 @@ A Claude Code skill suite for automating PyTorch deep learning engineering workf
 
 ## Shared resources
 
-- `shared/schemas/` — contract schemas
-- `shared/contracts/` — example contract files
-- `shared/templates/` — reusable task templates
+- `shared/schemas/` — JSON Schema files for contract validation
+- `shared/contracts/` — canonical schema-valid contract examples
+- `shared/examples/contracts/` — scenario contract examples and recipes
+- `shared/python/` — reusable Python utilities shared across skills
 - `docs/` — architecture and workflow docs
 
 ## Recommended flow

@@ -6,7 +6,7 @@ Usage:
     python validate_contract.py --contract path/to/data_contract.yaml
     python validate_contract.py --contract path/to/data_contract.yaml --schema path/to/schema.json
     python validate_contract.py --validate-examples
-    python validate_contract.py --validate-shared-catalog
+    python validate_contract.py --validate-shared-examples
     python validate_contract.py --validate-all
 
 If optional YAML/schema packages are unavailable, the script falls back to a
@@ -687,42 +687,39 @@ def validate_path(contract_path, schema, strict_handoff=False):
     return validate_contract(contract, schema, strict_handoff=strict_handoff)
 
 
+def validate_contract_files(contract_files, schema, strict_handoff=False):
+    if not contract_files:
+        return False, [("<examples>", ["No contract files found."])]
+
+    failures = []
+    for contract_file in contract_files:
+        is_valid, errors = validate_path(contract_file, schema, strict_handoff=strict_handoff)
+        if is_valid:
+            print(f"✓ {contract_file}")
+        else:
+            failures.append((str(contract_file), errors))
+            print(f"✗ {contract_file}")
+            for err in errors:
+                print(f"  - {err}")
+
+    return len(failures) == 0, failures
+
+
 def validate_example_suite(examples_root, schema, strict_handoff=False):
     example_files = sorted(examples_root.glob("*/data_contract.yaml"))
-    if not example_files:
-        return False, [f"No example contracts found under: {examples_root}"]
-
-    failures = []
-    for example_file in example_files:
-        is_valid, errors = validate_path(example_file, schema, strict_handoff=strict_handoff)
-        if is_valid:
-            print(f"✓ {example_file}")
-        else:
-            failures.append((str(example_file), errors))
-            print(f"✗ {example_file}")
-            for err in errors:
-                print(f"  - {err}")
-
-    return len(failures) == 0, failures
+    return validate_contract_files(example_files, schema, strict_handoff=strict_handoff)
 
 
-def validate_shared_catalog(catalog_path, schema, strict_handoff=False):
-    catalog = load_yaml(catalog_path)
-    if not isinstance(catalog, dict) or not catalog:
-        return False, [(str(catalog_path), ["Shared catalog is empty or not a mapping."])]
-
-    failures = []
-    for example_name, contract in catalog.items():
-        is_valid, errors = validate_contract(contract, schema, strict_handoff=strict_handoff)
-        if is_valid:
-            print(f"✓ {catalog_path}::{example_name}")
-        else:
-            failures.append((f"{catalog_path}::{example_name}", errors))
-            print(f"✗ {catalog_path}::{example_name}")
-            for err in errors:
-                print(f"  - {err}")
-
-    return len(failures) == 0, failures
+def resolve_shared_data_examples(script_dir):
+    shared_root = (script_dir / "../../../../shared").resolve()
+    files = []
+    canonical = shared_root / "contracts" / "data_contract.example.yaml"
+    if canonical.exists():
+        files.append(canonical)
+    scenario_dir = shared_root / "examples" / "contracts" / "data"
+    if scenario_dir.exists():
+        files.extend(sorted(scenario_dir.glob("*.yaml")))
+    return files
 
 
 def main():
@@ -730,13 +727,13 @@ def main():
     parser.add_argument("--contract", help="Path to one data_contract.yaml file")
     parser.add_argument("--schema", default=None, help="Path to JSON schema (default: use built-in)")
     parser.add_argument("--validate-examples", action="store_true", help="Validate all standalone example contracts")
-    parser.add_argument("--validate-shared-catalog", action="store_true", help="Validate each example entry in the shared catalog")
-    parser.add_argument("--validate-all", action="store_true", help="Validate standalone examples and shared catalog examples")
+    parser.add_argument("--validate-shared-examples", action="store_true", help="Validate shared canonical and scenario examples")
+    parser.add_argument("--validate-all", action="store_true", help="Validate standalone and shared examples")
     parser.add_argument("--strict-handoff", action="store_true", help="Require downstream-ready contracts, including inferred_format_spec for auto_inferred entries")
     args = parser.parse_args()
 
-    if not any([args.contract, args.validate_examples, args.validate_shared_catalog, args.validate_all]):
-        parser.error("Provide --contract or one of --validate-examples, --validate-shared-catalog, --validate-all")
+    if not any([args.contract, args.validate_examples, args.validate_shared_examples, args.validate_all]):
+        parser.error("Provide --contract or one of --validate-examples, --validate-shared-examples, --validate-all")
 
     script_dir = Path(__file__).parent
 
@@ -784,14 +781,14 @@ def main():
         else:
             print(f"✗ Standalone example validation failed for {len(failures)} example(s).")
 
-    if args.validate_shared_catalog or args.validate_all:
-        catalog_path = script_dir / "../../../../shared/contracts/data_contract.example.yaml"
-        is_valid, failures = validate_shared_catalog(catalog_path, schema, strict_handoff=args.strict_handoff)
+    if args.validate_shared_examples or args.validate_all:
+        shared_files = resolve_shared_data_examples(script_dir)
+        is_valid, failures = validate_contract_files(shared_files, schema, strict_handoff=args.strict_handoff)
         success = success and is_valid
         if is_valid:
-            print("✓ All shared catalog examples are valid.")
+            print("✓ All shared data contract examples are valid.")
         else:
-            print(f"✗ Shared catalog validation failed for {len(failures)} example(s).")
+            print(f"✗ Shared data contract example validation failed for {len(failures)} example(s).")
 
     sys.exit(0 if success else 1)
 

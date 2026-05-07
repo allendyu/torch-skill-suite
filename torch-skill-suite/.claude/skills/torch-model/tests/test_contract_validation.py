@@ -12,9 +12,10 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from validate_contract import (
     _validate_builtin,
     _load_yaml,
-    validate_contract,
     find_schema,
-    find_shared_catalog,
+    find_shared_contract,
+    find_shared_examples_dir,
+    validate_contract,
 )
 
 
@@ -126,20 +127,21 @@ class TestBuiltinValidation:
         assert any("output_shape" in e for e in errors)
 
 
-class TestSharedCatalog:
-    def test_all_catalog_entries_valid(self):
-        catalog_path = find_shared_catalog()
-        if not catalog_path:
-            pytest.skip("Shared catalog not found")
-        schema_path = find_schema()
-        instance = _load_yaml(catalog_path)
-        for name, entry in instance.items():
-            if not isinstance(entry, dict):
-                continue
-            errors = validate_contract(str(catalog_path), schema_path) if False else _validate_builtin(entry)
-            # Validate each entry directly
-            errors = _validate_builtin(entry)
-            assert len(errors) == 0, f"Catalog entry '{name}' has errors: {errors}"
+class TestSharedExamples:
+    def test_canonical_shared_example_valid(self):
+        contract_path = find_shared_contract()
+        if not contract_path:
+            pytest.skip("Shared canonical example not found")
+        errors = validate_contract(contract_path, find_schema())
+        assert len(errors) == 0, f"Shared canonical example has errors: {errors}"
+
+    def test_shared_scenario_examples_valid(self):
+        examples_dir = find_shared_examples_dir()
+        if not examples_dir:
+            pytest.skip("Shared scenario examples directory not found")
+        for example_file in sorted(Path(examples_dir).glob("*.yaml")):
+            errors = validate_contract(str(example_file), find_schema())
+            assert len(errors) == 0, f"Shared example '{example_file.name}' has errors: {errors}"
 
 
 class TestExampleContracts:

@@ -1,0 +1,30 @@
+# Scenario data contract example: time_series_regression.
+
+data_type: time_series
+task_type: regression
+input_spec:
+  shape:
+  - 100
+  - 5
+  dtype: float32
+output_spec:
+  type: continuous
+  output_dim: 1
+splits:
+  train: 0.7
+  val: 0.15
+  test: 0.15
+preprocessing:
+- name: standardize
+  params:
+    per_feature: true
+data_format_option: user_provided
+user_format_spec:
+  format_type: NPZ
+  details:
+    keys:
+    - X
+    - y
+    shape: (n_samples, 100, 5)
+metadata:
+  description: Multivariate time series predicting continuous value

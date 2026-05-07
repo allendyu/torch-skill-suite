@@ -6,7 +6,7 @@ Usage:
     python validate_contract.py --contract path/to/model_contract.yaml
     python validate_contract.py --contract path/to/model_contract.yaml --schema path/to/schema.json
     python validate_contract.py --validate-examples
-    python validate_contract.py --validate-shared-catalog
+    python validate_contract.py --validate-shared-examples
 
 If optional YAML/jsonschema packages are unavailable, the script falls back to a
 built-in YAML subset parser and built-in validation.
@@ -278,12 +278,26 @@ def find_schema():
     return None
 
 
-def find_shared_catalog():
-    """Find the shared model_contract.example.yaml catalog."""
+def find_shared_contract():
+    """Find the canonical shared model contract example."""
     script_dir = Path(__file__).resolve().parent
     candidates = [
         script_dir / ".." / ".." / ".." / ".." / "shared" / "contracts" / "model_contract.example.yaml",
         script_dir / ".." / ".." / "shared" / "contracts" / "model_contract.example.yaml",
+    ]
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.exists():
+            return str(resolved)
+    return None
+
+
+def find_shared_examples_dir():
+    """Find the shared scenario model contract examples directory."""
+    script_dir = Path(__file__).resolve().parent
+    candidates = [
+        script_dir / ".." / ".." / ".." / ".." / "shared" / "examples" / "contracts" / "model",
+        script_dir / ".." / ".." / "shared" / "examples" / "contracts" / "model",
     ]
     for candidate in candidates:
         resolved = candidate.resolve()
@@ -318,90 +332,74 @@ def cmd_validate(args):
         sys.exit(0)
 
 
+def _validate_files(label, files):
+    schema_path = find_schema()
+    all_errors = []
+    for example_file in files:
+        errors = validate_contract(str(example_file), schema_path)
+        if errors:
+            all_errors.append((example_file.name, errors))
+    if all_errors:
+        print(f"Validation FAILED ({len(all_errors)} {label} file(s) with errors):")
+        for name, errors in all_errors:
+            print(f"  {name}:")
+            for err in errors:
+                print(f"    - {err}")
+        return False
+    print(f"All {len(files)} {label} file(s) passed validation.")
+    return True
+
+
 def cmd_validate_examples():
     examples_dir = find_examples_dir()
     if not examples_dir:
         print("No examples directory found.")
         sys.exit(1)
-    schema_path = find_schema()
-    all_errors = []
     example_files = sorted(Path(examples_dir).glob("*.yaml"))
     if not example_files:
         print(f"No YAML files found in {examples_dir}")
         sys.exit(1)
-    for example_file in example_files:
-        errors = validate_contract(str(example_file), schema_path)
-        if errors:
-            all_errors.append((example_file.name, errors))
-    if all_errors:
-        print(f"Validation FAILED ({len(all_errors)} file(s) with errors):")
-        for name, errors in all_errors:
-            print(f"  {name}:")
-            for err in errors:
-                print(f"    - {err}")
-        sys.exit(1)
-    else:
-        print(f"All {len(example_files)} example(s) passed validation.")
-        sys.exit(0)
+    sys.exit(0 if _validate_files("skill example", example_files) else 1)
 
 
-def cmd_validate_shared_catalog():
-    catalog_path = find_shared_catalog()
-    if not catalog_path:
-        print("Shared catalog not found.")
+def cmd_validate_shared_examples():
+    files = []
+    shared_contract = find_shared_contract()
+    if shared_contract:
+        files.append(Path(shared_contract))
+    shared_examples_dir = find_shared_examples_dir()
+    if shared_examples_dir:
+        files.extend(sorted(Path(shared_examples_dir).glob("*.yaml")))
+    if not files:
+        print("No shared model contract examples found.")
         sys.exit(1)
-    schema_path = find_schema()
-    instance = _load_yaml(catalog_path)
-    all_errors = {}
-    for name, entry in instance.items():
-        if not isinstance(entry, dict):
-            continue
-        errors = []
-        if schema_path and jsonschema is not None:
-            schema = _load_json(schema_path)
-            js_errors = _validate_with_jsonschema(entry, schema)
-            errors = [f"{'/'.join(str(p) for p in e.path)}: {e.message}" for e in js_errors]
-        else:
-            errors = _validate_builtin(entry)
-        if errors:
-            all_errors[name] = errors
-    if all_errors:
-        print(f"Validation FAILED ({len(all_errors)} catalog entry(s) with errors):")
-        for name, errors in all_errors.items():
-            print(f"  {name}:")
-            for err in errors:
-                print(f"    - {err}")
-        sys.exit(1)
-    else:
-        print(f"All {len(instance)} catalog entry(s) passed validation.")
-        sys.exit(0)
+    sys.exit(0 if _validate_files("shared example", files) else 1)
 
 
 def cmd_validate_all():
     errors_occurred = False
-    catalog_path = find_shared_catalog()
-    if catalog_path:
-        print("--- Validating shared catalog ---")
-        instance = _load_yaml(catalog_path)
-        schema_path = find_schema()
-        for name, entry in instance.items():
-            if not isinstance(entry, dict):
-                continue
-            errors = []
-            if schema_path and jsonschema is not None:
-                schema = _load_json(schema_path)
-                js_errors = _validate_with_jsonschema(entry, schema)
-                errors = [f"{'/'.join(str(p) for p in e.path)}: {e.message}" for e in js_errors]
-            else:
-                errors = _validate_builtin(entry)
+    shared_contract = find_shared_contract()
+    if shared_contract:
+        print("--- Validating shared canonical example ---")
+        errors = validate_contract(shared_contract, find_schema())
+        if errors:
+            print(f"  FAIL  {Path(shared_contract).name}: {errors[0]}")
+            errors_occurred = True
+        else:
+            print(f"  PASS  {Path(shared_contract).name}")
+    shared_examples_dir = find_shared_examples_dir()
+    if shared_examples_dir:
+        print("--- Validating shared scenario examples ---")
+        for example_file in sorted(Path(shared_examples_dir).glob("*.yaml")):
+            errors = validate_contract(str(example_file), find_schema())
             if errors:
-                print(f"  FAIL  {name}: {errors[0]}")
+                print(f"  FAIL  {example_file.name}: {errors[0]}")
                 errors_occurred = True
             else:
-                print(f"  PASS  {name}")
+                print(f"  PASS  {example_file.name}")
     examples_dir = find_examples_dir()
     if examples_dir:
-        print("--- Validating examples ---")
+        print("--- Validating skill examples ---")
         for example_file in sorted(Path(examples_dir).glob("*.yaml")):
             errors = validate_contract(str(example_file), find_schema())
             if errors:
@@ -420,8 +418,8 @@ def main():
     parser = argparse.ArgumentParser(description="Validate model contract YAML files.")
     parser.add_argument("--contract", help="Path to model_contract.yaml to validate")
     parser.add_argument("--schema", help="Path to model_contract.schema.json (auto-detected if omitted)")
-    parser.add_argument("--validate-examples", action="store_true", help="Validate all example contracts")
-    parser.add_argument("--validate-shared-catalog", action="store_true", help="Validate the shared catalog")
+    parser.add_argument("--validate-examples", action="store_true", help="Validate all skill example contracts")
+    parser.add_argument("--validate-shared-examples", action="store_true", help="Validate shared canonical and scenario examples")
     parser.add_argument("--validate-all", action="store_true", help="Validate all known model contracts")
     args = parser.parse_args()
 
@@ -429,8 +427,8 @@ def main():
         cmd_validate_all()
     elif args.validate_examples:
         cmd_validate_examples()
-    elif args.validate_shared_catalog:
-        cmd_validate_shared_catalog()
+    elif args.validate_shared_examples:
+        cmd_validate_shared_examples()
     elif args.contract:
         cmd_validate(args)
     else:

@@ -1,0 +1,35 @@
+# Scenario data contract example: object_detection.
+
+data_type: image
+task_type: detection
+input_spec:
+  shape:
+  - 3
+  - 640
+  - 640
+  dtype: uint8
+  channels_first: true
+output_spec:
+  type: bounding_box
+  bbox_format: xywh
+splits:
+  train: data/images/train
+  val: data/images/val
+preprocessing:
+- name: resize
+  params:
+    size:
+    - 640
+    - 640
+    keep_aspect_ratio: true
+- name: normalize
+  params:
+    scale: 1/255.0
+data_format_option: auto_inferred
+inferred_format_spec:
+  format_type: YOLO
+  details:
+    label_dir: data/labels
+    class_file: data/classes.txt
+metadata:
+  annotation_format: YOLO darknet

@@ -40,6 +40,30 @@ jobs:
           flake8 .claude/skills/ --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 .claude/skills/ --count --max-complexity=15 --max-line-length=127 --statistics
 
+      - name: Validate shared contract examples
+        run: |
+          python .claude/skills/torch-data/scripts/validate_contract.py --validate-shared-examples
+          python .claude/skills/torch-model/scripts/validate_contract.py --validate-shared-examples
+          python .claude/skills/torch-infer-deploy/scripts/validate_contract.py --contract shared/contracts/deploy_contract.example.yaml --schema shared/schemas/deploy_contract.schema.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          import jsonschema
+          import yaml
+
+          root = Path('.')
+          pairs = [
+              ('shared/schemas/project_spec.schema.json', 'shared/contracts/project_spec.example.yaml'),
+          ]
+          for schema_path, contract_path in pairs:
+              schema = json.loads((root / schema_path).read_text(encoding='utf-8'))
+              contract = yaml.safe_load((root / contract_path).read_text(encoding='utf-8'))
+              jsonschema.validate(contract, schema)
+              print(f'Validated {contract_path}')
+          PY
+        working-directory: torch-skill-suite
+
       - name: Test torch-data
         run: python -m pytest .claude/skills/torch-data/tests/ -v --tb=short -q
         working-directory: torch-skill-suite

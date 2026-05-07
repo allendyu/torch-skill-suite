@@ -1,0 +1,32 @@
+# Scenario data contract example: tabular_regression.
+
+data_type: tabular
+task_type: regression
+input_spec:
+  num_features: 18
+  dtype: float32
+output_spec:
+  type: continuous
+  output_dim: 1
+splits:
+  train: data/train.csv
+  val: data/val.csv
+  test: data/test.csv
+preprocessing:
+- name: impute
+  params:
+    strategy: median
+- name: encode_categorical
+  params:
+    strategy: one_hot
+- name: scale
+  params:
+    method: standard
+data_format_option: user_provided
+user_format_spec:
+  format_type: CSV
+  details:
+    header: true
+    target_column: sale_price
+metadata:
+  source: Housing price regression example

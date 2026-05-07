@@ -1,0 +1,41 @@
+# Scenario data contract example: video_classification.
+
+data_type: video
+task_type: classification
+input_spec:
+  shape:
+  - 3
+  - 16
+  - 224
+  - 224
+  fps: 30
+  duration: 2.0
+  dtype: uint8
+output_spec:
+  type: categorical
+  num_classes: 6
+splits:
+  train: data/videos/train
+  val: data/videos/val
+  test: data/videos/test
+preprocessing:
+- name: temporal_subsample
+  params:
+    num_frames: 16
+    strategy: uniform
+- name: resize
+  params:
+    size:
+    - 224
+    - 224
+data_format_option: auto_inferred
+inferred_format_spec:
+  format_type: VideoFolder
+  details:
+    video_extensions:
+    - .mp4
+    - .avi
+    - .mkv
+    label_source: directory names or manifest
+metadata:
+  source: Action recognition example
