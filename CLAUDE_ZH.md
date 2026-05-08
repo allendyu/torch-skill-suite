@@ -52,7 +52,7 @@ cd torch-skill-suite
 python -m pytest
 ```
 
-当前健康检查：2026-05-07 自检结果为 `199 passed`。测试目前会出现与 `torch.jit.trace`、`torch.jit.save`、`torch.jit.load` 相关的 PyTorch deprecation warning；这些 warning 不会导致测试失败，但部署导出代码后续应跟踪 `torch.export` 迁移路线。
+当前健康检查：2026-05-08 自检结果为 `199 passed`。测试目前会出现与 `torch.jit.trace`、`torch.jit.save`、`torch.jit.load` 相关的 PyTorch deprecation warning；这些 warning 不会导致测试失败，但部署导出代码后续应跟踪 `torch.export` 迁移路线。
 
 ### 检查数据集
 检查脚本会尝试推断数据集格式：
@@ -65,19 +65,21 @@ python torch-skill-suite/.claude/skills/torch-data/scripts/inspect_dataset.py --
 
 ## 重要目录
 
-- `torch-skill-suite/.claude/skills/` —— skill 定义（SKILL.md 文件）
+- `torch-skill-suite/.claude/skills/` —— skill 定义（SKILL.md、脚本、模板、测试）
 - `torch-skill-suite/shared/schemas/` —— contract 的 JSON Schema 文件
-- `torch-skill-suite/shared/contracts/` —— contract YAML 示例文件
-- `torch-skill-suite/examples/` —— 示例工作区占位目录（MVP 进行中）
-- `torch-skill-suite/docs/` —— 架构与工作流文档（当前仍为占位内容）
+- `torch-skill-suite/shared/contracts/` —— 规范的 `*.example.yaml` schema-valid 契约脚手架
+- `torch-skill-suite/shared/examples/contracts/` —— 按模态/任务组织的场景示例契约
+- `torch-skill-suite/shared/python/torch_skill_shared/` —— 跨 skill 复用的 Python 工具（`yaml_utils`、`model_builder`）
+- `torch-skill-suite/shared/route_map.yaml` —— `(data_type, task_type)` 到模型路由的权威映射表，附优先级与支持状态
+- `torch-skill-suite/docs/` —— 架构、工作流与 MVP 路线图文档
 
 ## 当前状态
 
-- **MVP 阶段**：六个 skill 均已有初始实现，图像分类路径是当前主要 MVP 路线。
-- **验证状态**：从 `torch-skill-suite/` 运行测试时，当前测试套件通过（2026-05-07 自检为 `199 passed`）；规范 contract 示例均可通过校验。
-- **文档**：`docs/` 已补充架构、工作流和 MVP 状态说明；完整设计仍可参考仓库根目录中的 `torch_skill_suite_plan.md`。
-- **示例**：`shared/contracts/` 包含 schema-valid 的规范 `*.example.yaml` 示例；`shared/examples/contracts/` 和各 skill 本地 `examples/` 目录包含场景化示例。
-- **已知 warning**：TorchScript 导出测试目前会触发 PyTorch 对 `torch.jit.*` 的 deprecation warning；短期应保持 TorchScript 可用，同时评估后续迁移到 `torch.export`。
+- **已支持路由**：`torch-data` → `torch-model` → `torch-train` → `torch-eval-tune` → `torch-infer-deploy` 五条端到端路线已全部实现：`image_classification`（P0）、`text_classification`、`image_segmentation`、`tabular_classification`、`tabular_regression`（P1）。其他 P2/P3 路线（检测、时间序列、音频、视频、多模态、生成）数据侧已支持、路由也已定义，但 model 模板尚未实现 —— 详见 `shared/route_map.yaml` 中的权威支持矩阵。
+- **`torch-engineering` 状态**：仅有 `SKILL.md` 描述职责与边界，尚未提供脚本、模板或测试；其余五个 skill 都已落地脚本与测试。
+- **验证状态**：从 `torch-skill-suite/` 运行测试时，套件通过（2026-05-08 自检 `199 passed`）；规范契约示例与 `project_spec`/`data`/`model`/`deploy` 四张 schema 均可通过校验。
+- **文档**：`docs/` 描述架构、工作流和 MVP 路线；各 skill 的细化路线图在自身的 `mvp_plan.md`；仓库根目录的 `torch_skill_suite_plan.md` 是最初的整体设计。
+- **已知 warning**：部署侧测试目前会触发 PyTorch 对 `torch.jit.*` 的 deprecation warning；测试仍通过，但部署路径后续应跟踪迁移到 `torch.export`。
 
 ## 关键设计原则
 

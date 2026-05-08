@@ -407,13 +407,14 @@ Generate reusable PyTorch Dataset/DataLoader scaffolds once the data layer is st
 - [x] Created `references/` with core guides
 - [x] Created first-batch examples
 - [x] Created validation and inspection scripts
+- [x] First scaffold generators for priority scenarios (`generate_dataset.py` covers image classification, text classification, tabular classification/regression, and image segmentation)
 - [ ] Tighten schema with task-aware constraints
 - [ ] Expand examples across major modalities/tasks
 - [ ] Modularize inspectors
 - [ ] Define structured inspection outputs
 - [ ] Add validation tests for all examples
 - [ ] Add dataset profile and validation-report artifacts
-- [ ] Add first scaffold generators for priority scenarios
+- [ ] Extend scaffold generation to audio, video, multimodal, time-series windowing
 
 ---
 

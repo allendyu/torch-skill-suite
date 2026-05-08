@@ -52,7 +52,7 @@ cd torch-skill-suite
 python -m pytest
 ```
 
-Current health check: `199 passed` on 2026-05-07. The suite currently emits PyTorch deprecation warnings around `torch.jit.trace`, `torch.jit.save`, and `torch.jit.load`; these do not fail tests, but deployment export code should track the future `torch.export` migration path.
+Current health check: `199 passed` on 2026-05-08. The suite currently emits PyTorch deprecation warnings around `torch.jit.trace`, `torch.jit.save`, and `torch.jit.load`; these do not fail tests, but deployment export code should track the future `torch.export` migration path.
 
 ### Inspecting Datasets
 The inspection script attempts to infer dataset format:
@@ -65,20 +65,21 @@ Skills are automatically triggered when user requests match their descriptions (
 
 ## Important Directories
 
-- `torch-skill-suite/.claude/skills/` — Skill definitions (SKILL.md files)
+- `torch-skill-suite/.claude/skills/` — Skill definitions (SKILL.md files, scripts, templates, tests)
 - `torch-skill-suite/shared/schemas/` — JSON Schema files for contracts
-- `torch-skill-suite/shared/contracts/` — Canonical schema-valid contract example YAML files
-- `torch-skill-suite/shared/examples/contracts/` — Scenario contract examples and recipes
-- `torch-skill-suite/examples/` — Placeholder example workspaces (MVP in progress)
-- `torch-skill-suite/docs/` — Architecture and workflow documentation (currently placeholders)
+- `torch-skill-suite/shared/contracts/` — Canonical schema-valid `*.example.yaml` contract scaffolds
+- `torch-skill-suite/shared/examples/contracts/` — Scenario contract examples (per modality/task)
+- `torch-skill-suite/shared/python/torch_skill_shared/` — Shared Python utilities (`yaml_utils`, `model_builder`)
+- `torch-skill-suite/shared/route_map.yaml` — Authoritative (data_type, task_type) → model route table with priority and support status
+- `torch-skill-suite/docs/` — Architecture, workflow, and MVP roadmap documentation
 
 ## Current State
 
-- **MVP phase**: All six skills now have initial implementations, with the image-classification path serving as the primary MVP route.
-- **Validation**: The package test suite currently passes (`199 passed` as of 2026-05-07) when run from `torch-skill-suite/`; canonical contract examples validate successfully.
-- **Documentation**: `docs/` now describes the architecture, workflow, and MVP status; refer to `torch_skill_suite_plan.md` in the repository root for the comprehensive design.
-- **Examples**: `shared/contracts/` contains canonical schema-valid `*.example.yaml` contracts; `shared/examples/contracts/` and skill-local `examples/` directories contain scenario-specific examples.
-- **Known warnings**: TorchScript export tests currently raise PyTorch deprecation warnings for `torch.jit.*`; keep TorchScript support working while evaluating `torch.export` for future deployment artifacts.
+- **Supported routes**: Five end-to-end routes are fully implemented across `torch-data` → `torch-model` → `torch-train` → `torch-eval-tune` → `torch-infer-deploy`: `image_classification` (P0), `text_classification`, `image_segmentation`, `tabular_classification`, `tabular_regression` (P1). Additional P2/P3 routes (detection, time series, audio, video, multimodal, generation) have data-side support and route definitions but no model/template implementations yet — see `shared/route_map.yaml` for the authoritative status matrix.
+- **`torch-engineering` status**: Skill description and boundaries are documented in `SKILL.md`, but no scripts, templates, or tests are implemented yet. The other five skills each ship scripts and tests.
+- **Validation**: The package test suite passes (`199 passed` as of 2026-05-08) when run from `torch-skill-suite/`; canonical contract examples and the `project_spec`/`data`/`model`/`deploy` schemas all validate cleanly.
+- **Documentation**: `docs/` describes architecture, workflow, and MVP status; per-skill roadmaps live in each skill's `mvp_plan.md`; `torch_skill_suite_plan.md` in the repository root is the original comprehensive design.
+- **Known warnings**: Deployment-side tests emit PyTorch deprecation warnings for `torch.jit.trace`, `torch.jit.save`, and `torch.jit.load`; tests still pass, but the deployment path should track migration to `torch.export`.
 
 ## Key Design Principles
 

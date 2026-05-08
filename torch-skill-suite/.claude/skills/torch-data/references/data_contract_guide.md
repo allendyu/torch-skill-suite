@@ -319,9 +319,9 @@ Use nested `input_spec` entries per modality and define pairing in a manifest, n
 
 Once your `data_contract` is complete, the `torch-data` skill will:
 
-1. Validate the contract against the schema.
-2. If `data_format_option` is `auto_inferred`, inspect the dataset and fill `inferred_format_spec`.
-3. Generate Dataset/DataLoader code that matches your specifications.
-4. Produce a `data_contract.yaml` file that can be consumed by downstream skills.
+1. Validate the contract against the schema (`scripts/validate_contract.py`).
+2. If `data_format_option` is `auto_inferred`, inspect the dataset and fill `inferred_format_spec` (`scripts/inspect_dataset.py`).
+3. Generate Dataset/DataLoader scaffolding that matches your specifications (`scripts/generate_dataset.py`). Codegen currently supports image classification (ImageFolder), text classification (JSONL/CSV), tabular classification/regression (CSV/TSV), and image segmentation (image/mask pairs).
+4. Produce a `data_contract.yaml` file that can be consumed by downstream skills (`torch-model`, `torch-train`).
 
 If you're unsure about a field, start with a minimal contract and let the skill ask for missing information.
